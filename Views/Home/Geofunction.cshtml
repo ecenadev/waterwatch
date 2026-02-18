@@ -1,0 +1,231 @@
+@{
+    ViewData["Title"] = "Water Lines Map";
+}
+
+<!-- Import Leaflet CSS -->
+<link rel="stylesheet" href="~/app/leaflet/leaflet.css" />
+
+<style>
+    #map {
+        height: 100vh !important;
+        width: 100%;
+    }
+
+    .line-vertex-marker {
+        background: transparent !important;
+        border: none !important;
+    }
+
+    .legend {
+        padding: 10px;
+        background: rgba(0,0,0,0.85);
+        color: white;
+        border-radius: 5px;
+    }
+
+    .legend i {
+        width: 18px;
+        height: 18px;
+        float: left;
+        margin-right: 8px;
+        opacity: 0.7;
+    }
+</style>
+
+<!-- Import Scripts -->
+<script src="~/app/jquery/dist/jquery.min.js"></script>
+<script src="~/app/leaflet/leaflet.js"></script>
+@* <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script> *@
+
+<script src="https://cdn.jsdelivr.net/npm/martinez-polygon-clipping@0.7.1/dist/martinez.min.js"></script>
+
+<div id="map"></div>
+<script>
+    const POLYGONS_URL = "/waterconsumption/getall";
+    const LINES_URL    = "/waterlines/getall";
+    
+    const map = L.map('map').setView([-33.92, 18.42], 11);
+    
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap'
+    }).addTo(map);
+    
+    window.polygonsById = {};
+    window.linesById = {};
+
+    function validateCoords(coords, type) {
+        if (!Array.isArray(coords) || coords.length === 0) return coords;
+        let firstPair = coords;
+        while (Array.isArray(firstPair[0])) { firstPair = firstPair[0]; }
+        const needsSwap = (firstPair[0] > 0 && firstPair[1] < 0);
+
+        if (type === 'poly') {
+            return coords.map(ring => ring.map(subRing => 
+                subRing.map(p => needsSwap ? [p[1], p[0]] : [p[0], p[1]])
+            ));
+        } else {
+            return coords.map(p => needsSwap ? [p[1], p[0]] : [p[0], p[1]]);
+        }
+    }
+    
+    async function loadAllData() {
+        try {
+            const [polyRes, lineRes] = await Promise.all([fetch(POLYGONS_URL), fetch(LINES_URL)]);
+            const polygonsData = await polyRes.json();
+            const linesData = await lineRes.json();
+            
+            polygonsData.forEach(item => {
+                try {
+                    let coords = JSON.parse(item.coordinates || "[]");
+                    const isPolygon = Array.isArray(coords) && Array.isArray(coords[0]) && Array.isArray(coords[0][0]);
+                    
+                    if (isPolygon) {
+                        coords = validateCoords(coords, 'poly');
+                        const polygon = L.polygon(coords, {
+                            color: '#3388ff',
+                            fillColor: '#3388ff',
+                            fillOpacity: 0.5,
+                            weight: 2
+                        }).addTo(map);
+                        
+                        const id = item.id || 'poly_' + Math.random();
+                        window.polygonsById[id] = polygon;
+                        
+                        polygon.on('click', function(e) {
+                            console.log("Polygon clicked:", item.neighbourhood);
+                            L.DomEvent.stopPropagation(e);
+                            handlePolygonClick(polygon);
+                        });
+                    }
+                } catch (e) { console.error('Poly error', e); }
+            });
+            
+            linesData.forEach(item => {
+                try {
+                    let coords = JSON.parse(item.coordinates || "[]");
+                    const isLine = Array.isArray(coords) && Array.isArray(coords[0]) && typeof coords[0][0] === 'number';
+                    
+                    if (isLine) {
+                        coords = validateCoords(coords, 'line');
+                        const line = L.polyline(coords, {
+                            color: '#ff6b35',
+                            weight: 4,
+                            opacity: 0.8
+                        }).addTo(map);
+                        
+                        const id = item.id || 'line_' + Math.random();
+                        window.linesById[id] = line;
+                        
+                        line.on('click', function(e) {
+                            console.log("Line clicked:", item.name);
+                            L.DomEvent.stopPropagation(e);
+                            handleLineClick(line);
+                        });
+                    }
+                } catch (e) { console.error('Line error', e); }
+            });
+            
+            addResetButton();
+            map.on('click', showAll);
+        } catch (error) { console.error(error); }
+    }
+
+    // CLICK LINE -> Show only this line and intersecting polygons
+    function handleLineClick(clickedLine) {
+        const lineLatLngs = clickedLine.getLatLngs(); 
+        
+        // Remove other lines
+        Object.values(window.linesById).forEach(l => {
+            if (l !== clickedLine) map.removeLayer(l);
+        });
+
+        // Show/Hide Polygons based on intersection
+        Object.values(window.polygonsById).forEach(poly => {
+            if (isIntersecting(lineLatLngs, poly)) {
+                if (!map.hasLayer(poly)) poly.addTo(map);
+            } else {
+                map.removeLayer(poly);
+            }
+        });
+    }
+
+    // CLICK POLYGON -> Show only this polygon and intersecting lines
+    function handlePolygonClick(clickedPoly) {
+        // Remove other polygons
+        Object.values(window.polygonsById).forEach(p => {
+            if (p !== clickedPoly) map.removeLayer(p);
+        });
+
+        // Show/Hide Lines based on intersection
+        Object.values(window.linesById).forEach(line => {
+            if (isIntersecting(line.getLatLngs(), clickedPoly)) {
+                if (!map.hasLayer(line)) line.addTo(map);
+            } else {
+                map.removeLayer(line);
+            }
+        });
+    }
+
+    function isIntersecting(linePoints, polyLayer) {
+        // Handle potential multi-polygon nesting
+        const polyLatLngs = polyLayer.getLatLngs();
+        const flatPoly = polyLatLngs.flat(Infinity);
+        const flatLine = linePoints.flat(Infinity);
+
+        if (flatLine.length === 0 || flatPoly.length === 0) return false;
+
+        // 1. Check if segments cross
+        for (let i = 0; i < flatLine.length - 1; i++) {
+            for (let j = 0; j < flatPoly.length; j++) {
+                const p1 = flatLine[i];
+                const p2 = flatLine[i + 1];
+                const p3 = flatPoly[j];
+                const p4 = flatPoly[(j + 1) % flatPoly.length];
+
+                if (segmentsIntersect(p1, p2, p3, p4)) return true;
+            }
+        }
+
+        // 2. Check if first point of line is inside polygon (fully contained)
+        return isPointInPoly(flatLine[0], flatPoly);
+    }
+
+    function segmentsIntersect(p1, p2, p3, p4) {
+        const ccw = (A, B, C) => (C.lat - A.lat) * (B.lng - A.lng) > (B.lat - A.lat) * (C.lng - A.lng);
+        return (ccw(p1, p3, p4) !== ccw(p2, p3, p4)) && (ccw(p1, p2, p3) !== ccw(p1, p2, p4));
+    }
+
+    function isPointInPoly(pt, poly) {
+        let inside = false;
+        for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+            const xi = poly[i].lng, yi = poly[i].lat;
+            const xj = poly[j].lng, yj = poly[j].lat;
+            if (((yi > pt.lat) !== (yj > pt.lat)) && (pt.lng < (xj - xi) * (pt.lat - yi) / (yj - yi) + xi)) inside = !inside;
+        }
+        return inside;
+    }
+
+    function showAll() {
+        Object.values(window.polygonsById).forEach(p => p.addTo(map));
+        Object.values(window.linesById).forEach(l => l.addTo(map));
+    }
+
+    function addResetButton() {
+        const c = L.control({position: 'topright'});
+        c.onAdd = () => {
+            const b = L.DomUtil.create('button');
+            b.innerHTML = "Show All";
+            b.style.padding = "10px";
+            b.style.cursor = "pointer";
+            b.onclick = (e) => {
+                L.DomEvent.stopPropagation(e);
+                showAll();
+            };
+            return b;
+        };
+        c.addTo(map);
+    }
+
+    document.addEventListener('DOMContentLoaded', loadAllData);
+</script>

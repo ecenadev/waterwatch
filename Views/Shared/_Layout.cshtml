@@ -1,0 +1,144 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - WaterWatch</title>
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="~/app/bootstrap/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="~/app/font-awesome/css/font-awesome.min.css">
+    <link rel="stylesheet" href="~/app/Ionicons/css/ionicons.min.css">
+    <link rel="stylesheet" href="~/app/admin/css/AdminLTE.min.css">
+    <link rel="stylesheet" href="~/app/admin/css/skins/_all-skins.min.css">
+
+    <link rel="stylesheet"
+          href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,600,700">
+
+    <style>
+        /* Optional: better sidebar button spacing */
+        .sidebar-menu .btn {
+            margin-bottom: 5px;
+            text-align: left;
+        }
+        .content-wrapper {
+            background: #f4f4f4; /* subtle light background */
+        }
+    </style>
+</head>
+
+<body class="hold-transition skin-green sidebar-mini">
+<div class="wrapper">
+
+    <!-- HEADER -->
+    <header class="main-header">
+        <a href="#" class="logo" style="background:#1e282c;">
+            <span class="logo-mini"><b>W</b>W</span>
+            <span class="logo-lg"><b style="color:green">WATER</b>WATCH</span>
+        </a>
+
+        <nav class="navbar navbar-static-top"></nav>
+    </header>
+
+    <!-- SIDEBAR -->
+    <aside class="main-sidebar">
+        <section class="sidebar">
+
+            <ul class="sidebar-menu" data-widget="tree">
+                <li class="header">MAPS NAVIGATION</li>
+
+                <li class="treeview active">
+                    <a href="#">
+                        <i class="fa fa-globe"></i>
+                        <span>Maps</span>
+                        <span class="pull-right-container">
+                            <i class="fa fa-angle-left pull-right"></i>
+                        </span>
+                    </a>
+
+                    <ul class="treeview-menu">
+
+                        <!-- Toggle lines button -->
+                        <li>
+                            <a href="#" id="toggleLinesBtn" class="btn btn-primary btn-block">
+                                <i class="fa fa-eye-slash"></i> <span>Hide Lines</span>
+                            </a>
+                        </li>
+
+                        <!-- Water pipes page -->
+                        <li>
+                            <a asp-controller="Home" asp-action="Lines" class="btn btn-info btn-block">
+                                <i class="fa fa-map"></i> <span>Water Pipes</span>
+                            </a>
+                        </li>
+
+                        <!-- Geo Functions page -->
+                        <li>
+                            <a asp-controller="Home" asp-action="GeoFunction" class="btn btn-success btn-block">
+                                <i class="fa fa-draw-polygon"></i> <span>Geo Functions</span>
+                            </a>
+                        </li>
+
+                    </ul>
+                </li>
+            </ul>
+
+        </section>
+    </aside>
+
+    <!-- CONTENT -->
+    <div class="content-wrapper">
+        <section class="content">
+            @RenderBody()
+        </section>
+    </div>
+
+</div>
+
+<!-- SCRIPTS -->
+<script src="~/app/jquery/jquery.min.js"></script>
+<script src="~/app/jquery-ui/jquery-ui.min.js"></script>
+<script src="~/app/bootstrap/dist/js/bootstrap.min.js"></script>
+<script src="~/app/admin/js/adminlte.min.js"></script>
+
+<script>
+    // Ensure jQuery UI button bridge works
+    $.widget.bridge('uibutton', $.ui.button);
+
+    document.addEventListener("DOMContentLoaded", function () {
+
+        let linesVisible = true;
+        const toggleBtn = document.getElementById("toggleLinesBtn");
+
+        toggleBtn.addEventListener("click", function (e) {
+            e.preventDefault();
+
+            if (!window.linesById || !window.map) return;
+
+            // Toggle visibility of each line
+            for (let id in window.linesById) {
+                const line = window.linesById[id];
+                if (linesVisible) {
+                    map.removeLayer(line);
+                } else {
+                    line.addTo(map);
+                }
+            }
+
+            // Toggle state, button text, color, and icon
+            linesVisible = !linesVisible;
+            toggleBtn.querySelector("span").innerText = linesVisible ? "Hide Lines" : "Show Lines";
+
+            toggleBtn.classList.toggle("btn-primary", linesVisible);
+            toggleBtn.classList.toggle("btn-warning", !linesVisible);
+
+            toggleBtn.querySelector("i").classList.toggle("fa-eye-slash", linesVisible);
+            toggleBtn.querySelector("i").classList.toggle("fa-eye", !linesVisible);
+        });
+    });
+</script>
+
+@await RenderSectionAsync("Scripts", required: false)
+
+</body>
+</html>

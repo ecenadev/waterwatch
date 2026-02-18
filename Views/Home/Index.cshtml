@@ -1,0 +1,2628 @@
+﻿﻿@{
+    ViewData["Title"] = "Home Page";
+}
+
+<!-- Import Leaflet CSS -->
+<link rel="stylesheet" href="~/app/leaflet/leaflet.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+
+<style>
+    .custom-marker,
+    .editable-marker,
+    .line-vertex-marker,
+    .temp-point-marker {
+        background: transparent !important;
+        border: none !important;
+    }
+
+    .temp-point-marker div {
+        cursor: default !important;
+    }
+
+    .neighbourhoodInput {
+        color: black;
+    }
+
+    #map {
+        height: calc(100vh - 0px) !important;
+    }
+
+    .leaflet-container {
+        width: 100%;
+        height: 100vh;
+    }
+
+    .legend,
+    .temporal-legend {
+        padding: 6px 10px;
+        font: 14px/16px Arial, Helvetica, sans-serif;
+        background: rgba(0, 0, 0, 0.85);
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+        border-radius: 5px;
+        color: whitesmoke;
+    }
+
+    #legendTitle {
+        text-align: center;
+        margin-bottom: 15px;
+        color: whitesmoke;
+        font-weight: bold;
+    }
+
+    .symbolsContainer {
+        float: left;
+        margin-left: 50px;
+    }
+
+    .legendCircle {
+        border-radius: 50%;
+        border: 1px solid #537898;
+        background: rgba(0, 128, 128, 0.5);
+        display: inline-block;
+    }
+
+    .legendValue {
+        position: absolute;
+        right: 12px;
+        color: whitesmoke;
+        font-size: 10pt;
+        text-align: center;
+        font-weight: bold;
+    }
+
+    .info {
+        width: 30vw;
+        height: 48vh;
+        padding: 6px 10px;
+        font: 14px/16px Arial, Helvetica, sans-serif;
+        background: rgba(0, 0, 0, 0.85);
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+        border-radius: 5px;
+        color: whitesmoke;
+    }
+
+    .info h5 {
+        margin: 0 0 5px;
+        color: whitesmoke;
+        text-align: center;
+        font-weight: bold;
+    }
+
+    .info #horBarChart {
+        width: 100% !important;
+        max-width: 800px;
+    }
+
+    .leaflet-control-layers {
+        float: right;
+        top: 500px;
+        right: 0;
+        position: absolute;
+        background: rgba(0, 0, 0, 0.85);
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+        border-radius: 5px;
+        color: whitesmoke;
+    }
+
+    .legend {
+        line-height: 20px;
+        color: white;
+    }
+
+    .legend i {
+        width: 18px;
+        height: 18px;
+        float: left;
+        margin-right: 8px;
+        opacity: 0.7;
+    }
+
+    .range-control input {
+        border: 1px solid #ccc;
+        border-radius: 3px;
+        margin-bottom: 5px;
+        color: black;
+    }
+
+    .range-control button:hover {
+        opacity: 0.8;
+    }
+
+    .vertex-marker {
+        background: transparent !important;
+        border: none !important;
+    }
+
+    .vertex-marker div {
+        cursor: move !important;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    }
+
+    .edit-mode .vertex-marker div {
+        background: #ff0000 !important;
+        border: 3px solid yellow !important;
+    }
+
+    .leaflet-edit-controls {
+        background: white;
+        padding: 10px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        border: 2px solid #ff0000;
+    }
+
+    .edit-control-panel h4 {
+        margin: 0 0 10px 0;
+        color: #333;
+        font-size: 14px;
+        font-weight: bold;
+    }
+
+    .edit-control-panel button {
+        display: block;
+        width: 100%;
+        margin: 5px 0;
+        padding: 8px 12px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        transition: background-color 0.2s;
+    }
+
+    .edit-btn {
+        background: #ffeb3b;
+        color: #333;
+    }
+
+    .edit-btn:hover {
+        background: #fdd835;
+    }
+
+    .delete-btn {
+        background: #f44336;
+        color: white;
+    }
+
+    .delete-btn:hover {
+        background: #d32f2f;
+    }
+
+    .save-btn {
+        background: #4CAF50;
+        color: white;
+    }
+
+    .save-dialog .leaflet-control{
+        left:0 !important;
+    }
+
+    .save-btn:hover {
+        background: #45a049;
+    }
+
+    .cancel-btn {
+        background: #9e9e9e;
+        color: white;
+    }
+
+    .cancel-btn:hover {
+        background: #757575;
+    }
+
+    .recovery-dialog {
+        z-index: 1000;
+    }
+</style>
+
+<!-- Import Leaflet JS -->
+<script src="~/app/jquery/dist/jquery.min.js"></script>
+<script src="~/app/leaflet/leaflet.js"></script>
+<script src="~/app/extscripts/js/Chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+
+<div id="map"></div>
+
+<script>
+    // Global variables
+    var map;
+    var allPolygons = [];
+    var drawnItems = [];
+    // Add to your global variables
+    window.pointsById = {};
+    window.linesById = {};
+    window.editablePoints = {};
+    window.editableLines = {};
+
+    // Url Endpoints
+    var dataUrl = "/waterconsumption/getall";
+
+    // Basemap urls
+    var osm_humanitarian = L.tileLayer('http://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    });
+    var osm_map = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    });
+    var esri_dark_gray_base = L.tileLayer('http://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '&copy; <a href="http://services.arcgisonline.com/arcgis/rest/services">ESRI</a> arcgisonline'
+    });
+    var world_street_map = L.tileLayer('http://services.arcgisonline.com/arcgis/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri'
+    });
+    var world_imagery = L.tileLayer('http://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri'
+    });
+
+    // Initialize the map
+    map = L.map('map', {
+        layers: [osm_humanitarian]
+    }).setView([-33.925, 18.625], 11);
+
+    // Initialize basemaps
+    var baseLayers = {
+        "Open Street Map": osm_map,
+        "OSM Humanitarian": osm_humanitarian,
+        "Dark Gray Base": esri_dark_gray_base,
+        "World Street Map": world_street_map,
+        "World Imagery": world_imagery
+    };
+
+    // Add the layers control
+    L.control.layers(baseLayers).addTo(map);
+
+    // Get colours from: https://colorbrewer2.org/#type=sequential&scheme=YlGn&n=8
+    function getColor(d) {
+        var pallete = ['#ffffe5', '#f7fcb9', '#d9f0a3', '#addd8e', '#78c679', '#41ab5d', '#238443', '#005a32'];
+        return d > 40 ? pallete[7] :
+            d > 35 ? pallete[6] :
+                d > 30 ? pallete[5] :
+                    d > 25 ? pallete[4] :
+                        d > 20 ? pallete[3] :
+                            d > 15 ? pallete[2] :
+                                d > 10 ? pallete[1] :
+                                    pallete[0];
+    }
+
+    // Store polygon references
+    window.polygonsById = {};
+
+    // TEMPORARY DEBUG: Check API response
+    console.log("Testing API endpoint...");
+    $.getJSON(dataUrl, function (data) {
+        console.log("✅ API Response received!");
+        console.log("Total items:", data.length);
+        console.log("First item:", data[0]);
+        console.log("First item coordinates:", data[0]?.coordinates);
+    }).fail(function (jqxhr, textStatus, error) {
+        console.error("❌ API ERROR:", textStatus, error);
+        console.error("Response:", jqxhr.responseText);
+    });
+
+
+    // Load initial polygons + lines
+    // Load initial polygons + lines
+    $.getJSON(dataUrl, function (data) {
+        // 🎨 Define color and thickness options for lines
+        var lineColorsBlue = ["#3498db", "#2980b9", "#1f618d", "#85c1e9", "#5dade2", "#2e86c1"];
+
+        // 🎨 Define color and size options for points
+        var pointColors = ["#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c"];
+        var pointSizes = [8, 10, 12, 14];
+
+        var avgValues = data.map(d => parseFloat(d.averageMonthlyKL) || 0);
+        var minKL = Math.min(...avgValues);
+        var maxKL = Math.max(...avgValues);
+
+        $.each(data, function (i, item) {
+            try {
+                var coords = JSON.parse(item.coordinates || "[]");
+
+                // 🔥 IMPROVED POINT DETECTION - Handle both [[lat,lng]] and [lat,lng]
+                var isPoint = false;
+                var cleanPoint = null;
+
+                // Check if it's [lat, lng] (flat array)
+                if (Array.isArray(coords) &&
+                    coords.length === 2 &&
+                    typeof coords[0] === "number" &&
+                    typeof coords[1] === "number") {
+                    isPoint = true;
+                    cleanPoint = coords; // [lat, lng]
+                }
+
+                // Check if it's [[lat, lng]] (nested array with single point)
+                if (!isPoint &&
+                    Array.isArray(coords) &&
+                    coords.length === 1 &&
+                    Array.isArray(coords[0]) &&
+                    coords[0].length === 2 &&
+                    typeof coords[0][0] === "number" &&
+                    typeof coords[0][1] === "number") {
+                    isPoint = true;
+                    cleanPoint = coords[0]; // Extract [lat, lng] from [[lat, lng]]
+                }
+
+                console.log("Is Point:", isPoint, "Clean Point:", cleanPoint);
+
+                // Check if it's a polygon (nested array)
+                var isPolygon =
+                    Array.isArray(coords) &&
+                    Array.isArray(coords[0]) &&
+                    Array.isArray(coords[0][0]) &&
+                    typeof coords[0][0][0] === "number";
+
+                // Check if it's a closed line (same start/end point means polygon)
+                var isClosedLine = false;
+                if (!isPolygon && !isPoint && Array.isArray(coords) && coords.length > 2 &&
+                    Array.isArray(coords[0]) && typeof coords[0][0] === "number") {
+                    var first = coords[0];
+                    var last = coords[coords.length - 1];
+                    isClosedLine = (first[0] === last[0] && first[1] === last[1]);
+                }
+
+                var isLine =
+                    !isPoint &&
+                    Array.isArray(coords) &&
+                    Array.isArray(coords[0]) &&
+                    typeof coords[0][0] === "number" &&
+                    !isClosedLine;
+
+                // 🔥 RENDER POINT
+                if (isPoint && cleanPoint) {
+
+                    // Create a pane for points and set its z-index high
+                    map.createPane('pointsPane');
+                    map.getPane('pointsPane').style.zIndex = 2650; // Overlay pane is usually 400
+                    map.getPane('pointsPane').style.pointerEvents = 'none'; // Optional: lets clicks pass through
+                    var randomColor = pointColors[Math.floor(Math.random() * pointColors.length)];
+                    var randomSize = pointSizes[Math.floor(Math.random() * pointSizes.length)];
+
+                    var point = L.circleMarker(cleanPoint, {
+                        pane: 'pointsPane',
+                        color: '#000000',
+                        fillColor: "#FFFFFF",
+                        fillOpacity: 1.8,
+                        radius: 8,
+                        weight: 2,
+                        opacity:1,
+                        zIndexOffset: 2000
+                    }).addTo(map);
+
+                    point.bringToFront();
+                    var pointId = item.id || "server_point_" + point._leaflet_id;
+                    window.pointsById = window.pointsById || {};
+                    window.pointsById[pointId] = point;
+
+                    point.bindPopup(`
+                    <div style='color: black;'>
+                        <h4><b>Suburb Group:</b> [${item.suburb_group || "N/A"}]</h4>
+                        <h4><b>Neighbourhood:</b> ${item.neighbourhood || "N/A"}</h4>
+                        <h4><b>Water Consumption:</b> ${item.averageMonthlyKL || "N/A"} KL</h4>
+                        <button onclick='deleteLayer("${pointId}", "Point")' 
+                                style='padding: 8px; width: 100%; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer;'>
+                             Delete
+                        </button>
+                    </div>
+                `);
+
+                    console.log("✅ Point rendered:", pointId, cleanPoint);
+                    return; // Point finished
+                }
+
+                // ... rest of your line and polygon rendering code ...
+                // --- 5. RENDER POLYGONS/LINES (Logic continues here...)
+                // ... (Your existing Polygon/Line code)
+
+                @* } catch (e) {
+            console.error("Error processing item:", item, e);
+        } *@
+                // --------------------------------------------
+                // 🔥 RENDER LINE (polyline)
+                // --------------------------------------------
+                if (isLine) {
+                    var avgKL = parseFloat(item.averageMonthlyKL) || 0;
+
+                    // Normalize 0-1
+                    var norm = (avgKL - minKL) / (maxKL - minKL || 1); // avoid division by 0
+                    // Map to color index
+                    var colorIndex = Math.floor(norm * (lineColorsBlue.length - 1));
+                    var color = lineColorsBlue[colorIndex];
+
+                    // Weight can also scale with avgKL
+                    var weight = 2 + norm * 4; // 2 to 6
+
+                    var line = L.polyline(coords, {
+                        color: color,
+                        weight: weight,
+                        opacity: 1
+                    }).addTo(map);
+
+
+                    var lineId = item.id || "server_line_" + line._leaflet_id;
+                    window.linesById[lineId] = line;
+
+                    // Store line data on the line object itself
+                    line.lineData = {
+                        neighbourhood: item.neighbourhood || 'N/A',
+                        suburb_group: item.suburb_group || 'N/A',
+                        averageMonthlyKL: item.averageMonthlyKL || 0
+                    };
+
+                    line.bindPopup(
+                        "<div style='color: black;'><h4><b>Suburb Group:</b> [" + (item.suburb_group || "N/A") + "]</h4>" +
+                        "<h4><b>Neighbourhood:</b> " + (item.neighbourhood || "N/A") + "</h4>" +
+                        "<h4><b>Water Consumption:</b> " + (item.averageMonthlyKL || "N/A") + " KL</h4>" +
+                        "<button onclick='enableLineEditingById(\"" + lineId + "\")' " +
+                        "style='padding: 8px; width: 100%; margin: 5px 0; background: #007bff; color: white; border: none; border-radius: 3px;'> Edit Line</button>" +
+                        "<button onclick='deleteLayer(\"" + lineId + "\", \"Line\")' " +
+                        "style='padding: 8px; width: 100%; background: #dc3545; color: white; border: none; border-radius: 3px;'> Delete</button></div>"
+                    );
+
+                    return; // LINE DONE — Skip polygon code
+                }
+
+                // --------------------------------------------
+                // 🔥 RENDER POLYGON (unchanged)
+                // --------------------------------------------
+
+                // If it's a closed line, treat it as a polygon
+                if (isClosedLine) {
+                    coords = [coords]; // Wrap in array to match polygon format
+                }
+
+                var poly = L.polygon(coords, {
+                    fillColor: getColor(item.averageMonthlyKL),
+                    color: "white",
+                    fillOpacity: 0.8
+                });
+
+                poly.averageMonthlyKL = item.averageMonthlyKL;
+                poly.polygonData = item;
+
+                var polygonId = item.id || "server_polygon_" + poly._leaflet_id;
+                window.polygonsById[polygonId] = poly;
+
+                poly.bindPopup(
+                    "<div style='color: black;'><h4><b>Suburb Group:</b> [" + (item.suburb_group || 'N/A') + "]</h4>" +
+                    "<h4><b>Neighbourhood:</b> " + (item.neighbourhood || 'N/A') + "</h4>" +
+                    "<h4><b>Water Consumption:</b> " + (item.averageMonthlyKL || 'N/A') + " KL</h4>" +
+                    "<button onclick='enablePolygonEditingById(\"" + polygonId + "\")' " +
+                    "style='padding: 8px; width: 100%; background: #007bff; color: white; border: none; border-radius: 3px;'>Edit Shape</button>" +
+                    "<button onclick='logPolygonCoordinates(\"" + polygonId + "\")' " +
+                    "style='padding: 8px; width: 100%; background: #28a745; color: white; border: none; border-radius: 3px;'>Log Coordinates</button>" +
+                    "<button onclick='deleteLayer(\"" + polygonId + "\", \"Polygon\")' " +
+                    "style='padding: 8px; width: 100%; background: #dc3545; color: white; border: none; border-radius: 3px;'>Delete</button></div>"
+                );
+
+                poly.addTo(map);
+
+                allPolygons.push({
+                    layer: poly,
+                    data: item
+                });
+
+            } catch (error) {
+                console.error("Error loading shape:", error, item);
+            }
+        });
+    });
+    // Filter functions
+    function filterPolygonsByRange(minConsumption, maxConsumption) {
+        allPolygons.forEach(function (polyObj) {
+            map.removeLayer(polyObj.layer);
+        });
+        allPolygons.forEach(function (polyObj) {
+            if (polyObj.data.averageMonthlyKL >= minConsumption && polyObj.data.averageMonthlyKL <= maxConsumption) {
+                map.addLayer(polyObj.layer);
+            }
+        });
+    }
+
+    // Add these helper functions near the top of your script (after map initialization)
+
+    // Disable interactions on all layers during drawing
+    function disableLayerInteractions() {
+        // Disable polygon interactions
+        for (var id in window.polygonsById) {
+            var layer = window.polygonsById[id];
+            if (layer && layer._path) {
+                layer._path.style.pointerEvents = 'none';
+            }
+        }
+
+        // Disable line interactions
+        for (var id in window.linesById) {
+            var layer = window.linesById[id];
+            if (layer && layer._path) {
+                layer._path.style.pointerEvents = 'none';
+            }
+        }
+
+        // Disable point interactions
+        for (var id in window.pointsById) {
+            var layer = window.pointsById[id];
+            if (layer && layer._icon) {
+                layer._icon.style.pointerEvents = 'none';
+            }
+        }
+    }
+
+    // Re-enable interactions on all layers
+    function enableLayerInteractions() {
+        // Enable polygon interactions
+        for (var id in window.polygonsById) {
+            var layer = window.polygonsById[id];
+            if (layer && layer._path) {
+                layer._path.style.pointerEvents = 'auto';
+            }
+        }
+
+        // Enable line interactions
+        for (var id in window.linesById) {
+            var layer = window.linesById[id];
+            if (layer && layer._path) {
+                layer._path.style.pointerEvents = 'auto';
+            }
+        }
+
+        // Enable point interactions
+        for (var id in window.pointsById) {
+            var layer = window.pointsById[id];
+            if (layer && layer._icon) {
+                layer._icon.style.pointerEvents = 'auto';
+            }
+        }
+    }
+
+    function resetPolygons() {
+        allPolygons.forEach(function (polyObj) {
+            map.addLayer(polyObj.layer);
+        });
+    }
+
+    // Add range control UI
+    function addRangeControl() {
+        var rangeControl = L.control({ position: 'topright' });
+        rangeControl.onAdd = function (map) {
+            var div = L.DomUtil.create('div', 'range-control');
+            div.innerHTML = `
+                <div style="background: rgba(0,0,0,0.85); padding: 10px; border-radius: 5px; color: white; width: 250px;">
+                    <h5 style="margin: 0 0 10px 0; text-align: center;">Filter by Consumption</h5>
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: block; font-size: 12px;">Min (KL):</label>
+                        <input type="number" id="minConsumption" value="0" style="width: 100px; padding: 5px;">
+                    </div>
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: block; font-size: 12px;">Max (KL):</label>
+                        <input type="number" id="maxConsumption" value="50" style="width: 100px; padding: 5px;">
+                    </div>
+                    <button id="applyFilter" style="margin: 2px; padding: 5px; background: #005a32; color: white; border: none; border-radius: 3px; cursor: pointer; width: 100%;">Apply Filter</button>
+                    <button id="resetFilter" style="margin: 2px; padding: 5px; background: #8B0000; color: white; border: none; border-radius: 3px; cursor: pointer; width: 100%;">Reset</button>
+                </div>
+            `;
+            return div;
+        };
+        rangeControl.addTo(map);
+
+        setTimeout(function () {
+            document.getElementById('applyFilter').addEventListener('click', function () {
+                var min = parseFloat(document.getElementById('minConsumption').value);
+                var max = parseFloat(document.getElementById('maxConsumption').value);
+                if (min >= 0 && max >= min) {
+                    filterPolygonsByRange(min, max);
+                } else {
+                    alert('Please enter valid min and max values (min ≥ 0, max ≥ min)');
+                }
+            });
+            document.getElementById('resetFilter').addEventListener('click', function () {
+                document.getElementById('minConsumption').value = 0;
+                document.getElementById('maxConsumption').value = 50;
+                resetPolygons();
+            });
+            @* document.getElementById('drawPoint').addEventListener('click', startDrawingPoint);
+document.getElementById('drawLine').addEventListener('click', startDrawingLine); *@
+        }, 100);
+    }
+    @* setTimeout(function() {
+    // Remove and re-add buttons to clear any duplicate listeners
+    var drawPointBtn = document.getElementById('drawPoint');
+    var drawLineBtn = document.getElementById('drawLine');
+    
+    if (drawPointBtn) {
+        var newPointBtn = drawPointBtn.cloneNode(true);
+        drawPointBtn.parentNode.replaceChild(newPointBtn, drawPointBtn);
+        newPointBtn.addEventListener('click', function(e) {
+            L.DomEvent.stopPropagation(e);
+            L.DomEvent.preventDefault(e);
+            startDrawingPoint();
+        });
+    }
+    
+    if (drawLineBtn) {
+        var newLineBtn = drawLineBtn.cloneNode(true);
+        drawLineBtn.parentNode.replaceChild(newLineBtn, drawLineBtn);
+        newLineBtn.addEventListener('click', function(e) {
+            L.DomEvent.stopPropagation(e);
+            L.DomEvent.preventDefault(e);
+            startDrawingLine();
+        });
+    }
+}, 100); *@
+        addRangeControl();
+
+    // Create Legend
+    function createLegend() {
+    // Position the legend at the top-left of the map
+    var legend = L.control({ position: 'topleft' });
+
+    legend.onAdd = function (map) {
+        // Create the container
+        var legendContainer = L.DomUtil.create('div', 'legend');
+
+        // Stop clicks from propagating to the map
+        L.DomEvent.disableClickPropagation(legendContainer);
+
+        // Add title
+        $(legendContainer).append("<h5 id='legendTitle' style='color:black;'>WATER CONSUMPTION (KL)</h5>");
+
+        // Define grades and colors
+        var grades = [0, 10, 15, 20, 25, 30, 35, 40];
+
+        for (var i = 0; i < grades.length; i++) {
+            var from = grades[i];
+            var to = grades[i + 1];
+
+            var colorBox = "<i style='background:" + getColor(from + 1) + ";'></i>";
+            var label = from + (to ? "&ndash;" + to : "+");
+
+            // Append each line
+            legendContainer.innerHTML += colorBox + " " + label + "<br>";
+        }
+
+        // Add some professional styling
+        legendContainer.style.background = "rgba(255, 255, 255, 0.9)";
+        legendContainer.style.padding = "10px";
+        legendContainer.style.border = "1px solid #ccc";
+        legendContainer.style.borderRadius = "5px";
+        legendContainer.style.boxShadow = "0 0 15px rgba(0,0,0,0.2)";
+        legendContainer.style.fontSize = "14px";
+        legendContainer.style.color = "#333";
+
+        return legendContainer;
+    };
+
+    legend.addTo(map);
+}
+
+// Call the function to create the legend
+createLegend();
+
+    // Bar Chart
+    function barChartLegend() {
+        var info = L.control({ position: 'topright' });
+        info.onAdd = function (map) {
+            var div = L.DomUtil.create('div', 'info');
+            div.innerHTML += '<h5>Top 10 Consumers (KL)</h5>';
+            div.innerHTML += '<canvas id="horBarChart"></canvas>';
+            return div;
+        };
+        info.addTo(map);
+    }
+    @* barChartLegend(); *@
+
+    function displayhorBarChart() {
+        $.ajax({
+            url: "/waterconsumption/topten",
+            cache: "false",
+            dataType: "text",
+            type: "GET",
+            success: function (data) {
+                var obj = JSON.parse(data);
+                var x_labels = obj.map(o => o.neighbourhood);
+                var y_data = obj.map(o => o.averageMonthlyKL);
+                var bar_colors = obj.map(o => getColor(o.averageMonthlyKL));
+
+                var ctx = document.getElementById("horBarChart").getContext("2d");
+                new Chart(ctx, {
+                    type: 'horizontalBar',
+                    data: {
+                        labels: x_labels,
+                        datasets: [{
+                            label: 'water',
+                            backgroundColor: bar_colors,
+                            borderColor: "rgba(0,90,50, 1)",
+                            data: y_data
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            yAxes: [{ ticks: { beginAtZero: true } }],
+                            xAxes: [{ ticks: { autoSkip: false, beginAtZero: true } }]
+                        },
+                        onClick: function (evt, elements) {
+                            if (elements.length > 0) {
+                                var clickedConsumption = y_data[elements[0]._index];
+                                filterPolygonsByRange(clickedConsumption - 2, clickedConsumption + 2);
+                            }
+                        }
+                    }
+                });
+            }
+        });
+    }
+    displayhorBarChart();
+
+    // DELETE FUNCTION
+    window.deleteLayer = function (itemId, layerType) {
+        if (confirm('Are you sure you want to delete this polygon?')) {
+            $.ajax({
+                url: '/waterconsumption/delete',
+                type: 'DELETE',
+                contentType: 'application/json',
+                data: JSON.stringify({ id: itemId, type: layerType }),
+                success: function (response) {
+                    alert('Polygon deleted successfully!');
+                    map.closePopup();
+                    var layer = window.polygonsById[itemId];
+                    if (layer) {
+                        map.removeLayer(layer);
+                        delete window.polygonsById[itemId];
+                    }
+                },
+                error: function (xhr, status, error) {
+                    alert('Error deleting polygon: ' + error);
+                }
+            });
+        }
+    };
+
+    // DRAWING TOOLS
+    function addDrawingTools() {
+        var drawControl = L.control({ position: 'topleft' });
+        drawControl.onAdd = function (map) {
+            var div = L.DomUtil.create('div', 'drawing-controls');
+            div.innerHTML = `
+                <div style="background: rgba(0,0,0,0.85);width:188px; padding: 10px; border-radius: 5px; color: white;">
+                    <h5 style="margin: 0 0 10px 0; text-align: center;">Drawing Tools</h5>
+                    <button id="drawPolygon" style="margin: 2px; padding: 5px; background: #005a32; color: white; border: none; border-radius: 3px; cursor: pointer; width: 100%;">Draw Polygon</button>
+                    <button id="clearDrawings" style="margin: 2px; padding: 5px; background: #8B0000; color: white; border: none; border-radius: 3px; cursor: pointer; width: 100%;">Clear Drawings</button>
+                    <button id="drawPoint" style="margin: 2px; padding: 5px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; width: 100%;">Draw Point</button>
+<button id="drawLine" style="margin: 2px; padding: 5px; background: #ff6b35; color: white; border: none; border-radius: 3px; cursor: pointer; width: 100%;">Draw Line</button>
+                
+                </div>
+            `;
+            return div;
+        };
+        drawControl.addTo(map);
+
+        var currentDrawing = null;
+        var isDrawing = false;
+
+        setTimeout(function () {
+            document.getElementById('drawPolygon').addEventListener('click', function (e) {
+                L.DomEvent.stopPropagation(e);
+                L.DomEvent.preventDefault(e);
+                startDrawingPolygon();
+            });
+            document.getElementById('clearDrawings').addEventListener('click', function (e) {
+                L.DomEvent.stopPropagation(e);
+                L.DomEvent.preventDefault(e);
+                clearAllDrawings();
+            });
+            document.getElementById('drawPoint').addEventListener('click', function (e) {
+                L.DomEvent.stopPropagation(e);
+                L.DomEvent.preventDefault(e);
+                startDrawingPoint();
+            });
+            document.getElementById('drawLine').addEventListener('click', function (e) {
+                L.DomEvent.stopPropagation(e);
+                L.DomEvent.preventDefault(e);
+                startDrawingLine();
+            });
+        }, 100);
+
+        function startDrawingPoint() {
+            map.getContainer().style.cursor = 'crosshair';
+            disableLayerInteractions();
+
+            function onMapClick(e) {
+                L.DomEvent.stopPropagation(e);
+                // Remove listener BEFORE showing dialog to prevent double-click
+                map.off('click', onMapClick);
+                map.off('contextmenu', cancelDrawing);
+                map.getContainer().style.cursor = '';
+                enableLayerInteractions();
+                showPointSaveDialog(e.latlng);
+            }
+
+            function cancelDrawing(e) {
+                L.DomEvent.stopPropagation(e);
+                L.DomEvent.preventDefault(e);
+                map.off('click', onMapClick);
+                map.off('contextmenu', cancelDrawing);
+                map.getContainer().style.cursor = '';
+                enableLayerInteractions();
+            }
+
+            map.on('click', onMapClick);
+            map.on('contextmenu', cancelDrawing);
+        }
+
+        function showPointSaveDialog(latlng) {
+            // Check if dialog already exists and remove it
+            var existingDialog = document.querySelector('.save-dialog');
+            if (existingDialog) {
+                existingDialog.parentElement.remove();
+            }
+
+            var saveDialog = L.control({ position: 'topright' });
+            saveDialog.onAdd = function (map) {
+                var div = L.DomUtil.create('div', 'save-dialog');
+                div.innerHTML = `
+            <div style="position:relative;background: rgba(0,0,0,0.95); padding: 15px; border-radius: 5px; color: white; width: 300px;">
+                <h5 style="margin: 0 0 15px 0; text-align: center;">Save Point</h5>
+                <div style="margin-bottom: 10px;">
+                    <label>Neighbourhood:</label>
+                    <input type="text" id="pointNeighbourhood" style="width: 100%; padding: 5px; color: black;">
+                </div>
+                <div style="margin-bottom: 10px;">
+                    <label>Station Name:</label>
+                    <input type="text" id="pointSuburb" style="width: 100%; padding: 5px; color: black;">
+                </div>
+                <div style="margin-bottom: 10px;">
+                    <label>Number of Zones:</label>
+                    <input type="number" id="pointConsumption" style="width: 100%; padding: 5px; color: black;">
+                </div>
+                <p style="font-size: 12px; margin-bottom: 15px;">
+                    Coordinates: ${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}
+                </p>
+                <button id="savePoint" style="padding: 8px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; width: 48%; margin-right: 4%;">Save</button>
+                <button id="cancelPoint" style="padding: 8px; background: #8B0000; color: white; border: none; border-radius: 3px; cursor: pointer; width: 48%;">Cancel</button>
+            </div>
+        `;
+                return div;
+            };
+
+            saveDialog.addTo(map);
+
+            setTimeout(function () {
+                document.getElementById('savePoint').addEventListener('click', function (e) {
+                    L.DomEvent.stopPropagation(e);
+                    L.DomEvent.preventDefault(e);
+                    savePointToBackend(latlng);
+                    map.removeControl(saveDialog);
+                });
+
+                document.getElementById('cancelPoint').addEventListener('click', function (e) {
+                    L.DomEvent.stopPropagation(e);
+                    L.DomEvent.preventDefault(e);
+                    map.removeControl(saveDialog);
+                });
+            }, 100);
+        }
+
+
+        // 3. SAVE POINT TO BACKEND
+        function savePointToBackend(latlng) {
+            var neighbourhood = document.getElementById('pointNeighbourhood').value;
+            var suburb = document.getElementById('pointSuburb').value;
+            var averageMonthlyKL = parseFloat(document.getElementById('pointConsumption').value);
+
+            if (!neighbourhood || !suburb || isNaN(averageMonthlyKL)) {
+                alert('Please fill in all required fields!');
+                return;
+            }
+
+            var coordinates = [[latlng.lat, latlng.lng]];  // ✅ Array of one coordinate
+
+            var pointData = {
+                neighbourhood: neighbourhood,
+                suburb_group: [suburb],
+                averageMonthlyKL: averageMonthlyKL
+            };
+
+
+            // Create the point visually
+            var pointId = window.createPoint(latlng.lat, latlng.lng, pointData);
+
+            // Send to backend
+            $.ajax({
+                url: '/waterconsumption/addpoly',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    coordinates: JSON.stringify(coordinates),  // ✅ Correct format
+                    neighbourhood: neighbourhood,
+                    suburb_group: suburb,
+                    averageMonthlyKL: averageMonthlyKL
+                }),
+                success: function (response) {
+                    console.log('✅ Point saved:', response);
+                    alert('Point saved successfully!');
+                },
+                error: function (xhr, status, error) {
+                    console.error('❌ Error saving point:', error);
+                    alert('Error saving point: ' + error);
+                }
+            });
+        }
+
+        // 4. CREATE POINT (Visual)
+        window.createPoint = function (lat, lng, data = {}) {
+            var marker = L.marker([lat, lng], {
+                draggable: false,
+                icon: L.divIcon({
+                    className: 'custom-marker',
+                    html: '<div style="background: #007bff; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.5);"></div>',
+                    iconSize: [22, 22]
+                }), zIndexOffset: 2000
+            }).addTo(map);
+
+            var pointId = 'point_' + Date.now();
+            window.pointsById[pointId] = marker;
+
+            marker.pointData = {
+                neighbourhood: data.neighbourhood || 'Unknown',
+                suburb_group: data.suburb_group || ['Unknown'],
+                averageMonthlyKL: data.averageMonthlyKL || 0,
+                lat: lat,
+                lng: lng
+            };
+
+            marker.bindPopup(`
+        <div style="color: black; min-width: 200px;">
+            <h4><b>Point Data</b></h4>
+            <p><b>Neighbourhood:</b> ${marker.pointData.neighbourhood}</p>
+            <p><b>Suburb Group:</b> [${marker.pointData.suburb_group}]</p>
+            <p><b>Water Consumption:</b> ${marker.pointData.averageMonthlyKL} KL</p>
+            <p><b>Coordinates:</b> ${lat.toFixed(6)}, ${lng.toFixed(6)}</p>
+            
+            <button onclick="deleteLayer('${pointId}', 'Point')" 
+                    style="padding: 8px; width: 100%; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer;">
+                Delete
+            </button>
+        </div>
+    `);
+
+            return pointId;
+        };
+
+        // 5. EDIT POINT
+        window.enablePointEditing = function (pointId) {
+            var marker = window.pointsById[pointId];
+            if (!marker) {
+                alert('Point not found!');
+                return;
+            }
+
+            // Make marker draggable
+            marker.dragging.enable();
+            marker.setIcon(L.divIcon({
+                className: 'editable-marker',
+                html: '<div style="background: #ff0000; width: 20px; height: 20px; border-radius: 50%; border: 3px solid yellow; box-shadow: 0 0 15px rgba(255,0,0,0.7);"></div>',
+                iconSize: [26, 26]
+            }));
+
+            window.editablePoints[pointId] = {
+                marker: marker,
+                originalLatLng: marker.getLatLng()
+            };
+
+            marker.bindPopup(`
+        <div style="color: black; min-width: 250px;">
+            <h4> Editing Point</h4>
+            <p>Drag the point to move it</p>
+            <button onclick="savePointEdits('${pointId}')" 
+                    style="padding: 8px; background: #28a745; color: white; border: none; border-radius: 3px; cursor: pointer; width: 100%; margin: 2px;">
+                 Save Position
+            </button>
+            <button onclick="cancelPointEditing('${pointId}')" 
+                    style="padding: 8px; background: #6c757d; color: white; border: none; border-radius: 3px; cursor: pointer; width: 100%; margin: 2px;">
+                Cancel
+            </button>
+        </div>
+    `).openPopup();
+        };
+
+        // 6. SAVE POINT EDITS
+        window.savePointEdits = function (pointId) {
+
+            var editable = window.editablePoints[pointId];
+            if (!editable) {
+                alert("❌ No editable marker found!");
+                return;
+            }
+
+            // Get updated coordinates from the dragged marker
+            var newPos = editable.marker.getLatLng();
+
+            // Pull values from marker's stored data
+            var neighbourhood = editable.marker.pointData.neighbourhood || "Unknown Neighbourhood";
+            var suburb = editable.marker.pointData.suburb_group || "Unknown Suburb";
+            var averageMonthlyKL = Number(editable.marker.pointData.averageMonthlyKL || 0);
+
+            // Coordinates must be a STRING for your model
+            var coordinates = JSON.stringify([[newPos.lat, newPos.lng]]);
+
+            // Build update JSON (your controller requires dto wrapper)
+            var updateData = {
+                dto: {
+                    id: Number(pointId.replace("point_", "")),
+
+                    neighbourhood: neighbourhood,
+                    suburb_group: suburb,
+                    averageMonthlyKL: averageMonthlyKL,
+
+                    coordinates: coordinates
+                }
+            };
+
+            console.log("UPDATE JSON:", updateData);
+
+            $.ajax({
+                url: "/waterconsumption/updatepolygon",
+                type: "PUT",
+                contentType: "application/json",
+                data: JSON.stringify(updateData),
+
+                success: function (response) {
+                    console.log("✅ Point updated:", response);
+                    alert("Point updated successfully!");
+                },
+
+                error: function (xhr, status, error) {
+                    console.error("❌ Update failed:", xhr.responseText);
+                    alert("Error updating point: " + xhr.responseText);
+                }
+            });
+        };
+
+
+
+        // 7. CANCEL POINT EDITING
+        window.cancelPointEditing = function (pointId) {
+            if (!window.editablePoints[pointId]) return;
+
+            var editable = window.editablePoints[pointId];
+            editable.marker.setLatLng(editable.originalLatLng);
+            disablePointEditing(pointId);
+        };
+
+        // 8. DISABLE POINT EDITING
+        window.disablePointEditing = function (pointId) {
+            if (!window.editablePoints[pointId]) return;
+
+            var editable = window.editablePoints[pointId];
+            editable.marker.dragging.disable();
+            editable.marker.setIcon(L.divIcon({
+                className: 'custom-marker',
+                html: '<div style="background: #007bff; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.5);"></div>',
+                iconSize: [22, 22]
+            }));
+
+            var pointData = editable.marker.pointData || {};
+            editable.marker.bindPopup(`
+        <div style="color: black; min-width: 200px;">
+            <h4><b>Point Data</b></h4>
+            <p><b>Neighbourhood:</b> ${pointData.neighbourhood}</p>
+            <p><b>Suburb Group:</b> [${pointData.suburb_group}]</p>
+            <p><b>Water Consumption:</b> ${pointData.averageMonthlyKL} KL</p>
+            <p><b>Coordinates:</b> ${pointData.lat.toFixed(6)}, ${pointData.lng.toFixed(6)}</p>
+            <button onclick="enablePointEditing('${pointId}')" 
+                    style="padding: 8px; width: 100%; margin: 5px 0; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer;">
+                 Edit Point
+            </button>
+            <button onclick="deleteLayer('${pointId}', 'Point')" 
+                    style="padding: 8px; width: 100%; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer;">
+                 Delete
+            </button>
+        </div>
+    `);
+
+            delete window.editablePoints[pointId];
+        };
+
+        function startDrawingPolygon() {
+            if (isDrawing) {
+                if (currentDrawing && currentDrawing.points.length >= 3) {
+                    showPolygonSaveDialog(currentDrawing.points);
+                }
+                return;
+            }
+
+            isDrawing = true;
+            map.getContainer().style.cursor = 'crosshair';
+            disableLayerInteractions();
+            document.getElementById('drawPolygon').style.background = '#ff0000';
+            document.getElementById('drawPolygon').textContent = 'Finish Polygon';
+
+            var points = [];
+            var polyline = null;
+            var polygon = null;
+
+            function onMapClick(e) {
+                L.DomEvent.stopPropagation(e);
+                points.push(e.latlng);
+
+                if (polyline) map.removeLayer(polyline);
+                if (points.length > 1) {
+                    polyline = L.polyline(points, { color: 'red', dashArray: '5, 5' }).addTo(map);
+                }
+
+                if (points.length >= 3) {
+                    if (polygon) map.removeLayer(polygon);
+                    polygon = L.polygon(points, { color: 'red', fillColor: 'red', fillOpacity: 0.3, dashArray: '5, 5' }).addTo(map);
+                }
+
+                if (currentDrawing) currentDrawing.points = points;
+            }
+
+            map.on('click', onMapClick);
+            map.on('contextmenu', function (e) {
+                L.DomEvent.stopPropagation(e);
+                L.DomEvent.preventDefault(e);
+                if (points.length >= 3) {
+                    showPolygonSaveDialog(points);
+                }
+            });
+
+            currentDrawing = {
+                type: 'polygon',
+                points: points,
+                cleanup: function () {
+                    map.off('click', onMapClick);
+                    map.off('contextmenu');
+                    if (polyline) map.removeLayer(polyline);
+                    if (polygon) map.removeLayer(polygon);
+                    enableLayerInteractions();
+                }
+            };
+        }
+
+        function showPolygonSaveDialog(points) {
+            if (currentDrawing && currentDrawing.cleanup) {
+                currentDrawing.cleanup();
+            }
+
+            var saveDialog = L.control({ position: 'topright' });
+            saveDialog.onAdd = function (map) {
+                var div = L.DomUtil.create('div', 'save-dialog');
+                div.innerHTML = `
+                    <div style="position:relative;background: rgba(0,0,0,0.95); padding: 15px; border-radius: 5px; color: white; width: 300px;">
+                        <h5 style="margin: 0 0 15px 0; text-align: center;">Save Polygon</h5>
+                        <div style="margin-bottom: 10px;">
+                            <label>Neighbourhood:</label>
+                            <input type="text" id="neighbourhoodInput" style="width: 100%; padding: 5px; color: black;">
+                        </div>
+                        <div style="margin-bottom: 10px;">
+                            <label>Suburb:</label>
+                            <input type="text" id="suburbInput" style="width: 100%; padding: 5px; color: black;">
+                        </div>
+                        <div style="margin-bottom: 10px;">
+                            <label>Average Monthly KL:</label>
+                            <input type="number" id="consumptionInput" style="width: 100%; padding: 5px; color: black;">
+                        </div>
+                        <button id="savePolygon" style="padding: 8px; background: #005a32; color: white; border: none; border-radius: 3px; cursor: pointer; width: 48%;">Save</button>
+                        <button id="cancelSave" style="padding: 8px; background: #8B0000; color: white; border: none; border-radius: 3px; cursor: pointer; width: 48%;">Cancel</button>
+                    </div>
+                `;
+                return div;
+            };
+            saveDialog.addTo(map);
+
+            setTimeout(function () {
+                document.getElementById('savePolygon').addEventListener('click', function () {
+                    savePolygonToBackend(points);
+                    map.removeControl(saveDialog);
+                    cleanupDrawing();
+                });
+                document.getElementById('cancelSave').addEventListener('click', function () {
+                    map.removeControl(saveDialog);
+                    cleanupDrawing();
+                });
+            }, 100);
+        }
+
+        function savePolygonToBackend(points) {
+            var neighbourhood = document.getElementById('neighbourhoodInput').value;
+            var suburb = document.getElementById('suburbInput').value;
+            var averageMonthlyKL = parseFloat(document.getElementById('consumptionInput').value);
+
+            if (!neighbourhood || !suburb || isNaN(averageMonthlyKL)) {
+                alert('Please fill in all required fields!');
+                return;
+            }
+
+            // 🔥 CLOSE THE POLYGON - Add first point as last point
+            var coordinates = points.map(function (point) {
+                return [point.lat, point.lng];
+            });
+
+            // Check if polygon is already closed
+            var first = coordinates[0];
+            var last = coordinates[coordinates.length - 1];
+            var isClosed = (first[0] === last[0] && first[1] === last[1]);
+
+            // If not closed, close it
+            if (!isClosed) {
+                coordinates.push([first[0], first[1]]); // Close the polygon
+                console.log('🔥 Polygon closed by adding first point as last');
+            }
+
+            var requestData = {
+                neighbourhood: neighbourhood,
+                suburb_group: suburb,
+                averageMonthlyKL: averageMonthlyKL,
+                coordinates: JSON.stringify(coordinates)
+            };
+
+            console.log('Sending polygon data with', coordinates.length, 'points (closed):', requestData);
+
+            $.ajax({
+                url: '/waterconsumption/addpoly',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(requestData),
+                success: function (response) {
+                    console.log('✅ Polygon created successfully:', response);
+
+                    var finalPolygon = L.polygon(points, {
+                        color: 'blue',
+                        weight: 3,
+                        fillColor: getColor(averageMonthlyKL),
+                        fillOpacity: 0.8
+                    }).addTo(map);
+
+                    var itemId = response.id || 'polygon_' + Date.now();
+                    window.polygonsById[itemId] = finalPolygon;
+
+                    finalPolygon.averageMonthlyKL = averageMonthlyKL;
+                    finalPolygon.polygonData = {
+                        neighbourhood: neighbourhood,
+                        suburb_group: [suburb],
+                        averageMonthlyKL: averageMonthlyKL
+                    };
+
+                    finalPolygon.bindPopup(
+                        "<div style='color: black;'><h4><b>Suburb Group:</b> [" + suburb + "]</h4>" +
+                        "<h4><b>Neighbourhood:</b> " + neighbourhood + "</h4>" +
+                        "<h4><b>Water Consumption:</b> " + averageMonthlyKL + " KL</h4>" +
+                        "<button onclick='enablePolygonEditingById(\"" + itemId + "\")' style='padding: 8px; width: 100%; margin: 5px 0; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer;'>✏️ Edit Shape</button>" +
+                        "<button onclick='logPolygonCoordinates(\"" + itemId + "\")' style='padding: 8px; width: 100%; margin: 5px 0; background: #28a745; color: white; border: none; border-radius: 3px; cursor: pointer;'>📊 Log Coordinates</button>" +
+                        "<button onclick='deleteLayer(\"" + itemId + "\", \"Polygon\")' style='padding: 8px; width: 100%; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer;'>🗑️ Delete</button></div>"
+                    );
+
+                    drawnItems.push(finalPolygon);
+                    allPolygons.push({
+                        layer: finalPolygon,
+                        data: finalPolygon.polygonData
+                    });
+
+                    alert('Polygon saved successfully!');
+                },
+                error: function (xhr, status, error) {
+                    console.error('❌ Error saving polygon:', {
+                        status: status,
+                        error: error,
+                        responseText: xhr.responseText
+                    });
+
+                    var errorMsg = 'Error saving polygon:\n';
+                    try {
+                        var errorObj = JSON.parse(xhr.responseText);
+                        if (errorObj.errors) {
+                            for (var key in errorObj.errors) {
+                                errorMsg += key + ': ' + errorObj.errors[key] + '\n';
+                            }
+                        } else {
+                            errorMsg += xhr.responseText;
+                        }
+                    } catch (e) {
+                        errorMsg += xhr.responseText || error;
+                    }
+
+                    alert(errorMsg);
+                }
+            });
+        }
+        function cleanupDrawing() {
+            isDrawing = false;
+            map.getContainer().style.cursor = '';
+            enableLayerInteractions();
+            document.getElementById('drawPolygon').style.background = '#005a32';
+            document.getElementById('drawPolygon').textContent = 'Draw Polygon';
+        }
+
+        function clearAllDrawings() {
+            drawnItems.forEach(function (layer) {
+                if (layer && map.hasLayer(layer)) {
+                    map.removeLayer(layer);
+                    // Remove from polygonsById
+                    for (var id in window.polygonsById) {
+                        if (window.polygonsById[id] === layer) {
+                            delete window.polygonsById[id];
+                            break;
+                        }
+                    }
+                }
+            });
+            drawnItems = [];
+            if (currentDrawing && currentDrawing.cleanup) {
+                currentDrawing.cleanup();
+            }
+            cleanupDrawing();
+        }
+    }
+
+    function startDrawingLine() {
+        map.getContainer().style.cursor = 'crosshair';
+        disableLayerInteractions();
+        var points = [];
+        var polyline = null;
+        var tempMarkers = [];
+
+        function onMapClick(e) {
+            L.DomEvent.stopPropagation(e);  // ADD THIS
+            points.push(e.latlng);
+
+            // Update the temporary polyline
+            if (polyline) {
+                map.removeLayer(polyline);
+            }
+
+            if (points.length > 1) {
+                polyline = L.polyline(points, {
+                    color: '#ff6b35',
+                    weight: 4,
+                    opacity: 0.6,
+                    dashArray: '5, 5'
+                }).addTo(map);
+            }
+
+            // Add temporary marker
+            var tempMarker = L.marker(e.latlng, {
+                icon: L.divIcon({
+                    className: 'temp-point-marker',
+                    html: '<div style="background: #ff6b35; width: 8px; height: 8px; border-radius: 50%;"></div>',
+                    iconSize: [8, 8]
+                })
+            }).addTo(map);
+
+            tempMarkers.push(tempMarker);
+        }
+
+        function finishDrawing(e) {
+            L.DomEvent.stopPropagation(e);  // ADD THIS
+            L.DomEvent.preventDefault(e);    // ADD THIS
+
+            if (points.length >= 2) {
+                map.off('click', onMapClick);
+                map.off('contextmenu', finishDrawing);
+                map.getContainer().style.cursor = '';
+                enableLayerInteractions();
+
+                if (polyline) {
+                    map.removeLayer(polyline);
+                }
+
+                // Remove temp markers
+                tempMarkers.forEach(function (marker) {
+                    map.removeLayer(marker);
+                });
+
+                showLineSaveDialog(points);
+            } else {
+                alert('A line needs at least 2 points!');
+            }
+        }
+
+        map.on('click', onMapClick);
+        map.on('contextmenu', finishDrawing);
+
+        alert('Click to add points, right-click to finish drawing the line.');
+    }
+
+    addDrawingTools();
+
+    // =============================================
+    // POLYGON EDITING SYSTEM - REWRITTEN
+    // =============================================
+
+
+    window.editablePolygons = {};
+
+    // Main editing function - FIXED
+    window.enablePolygonEditingById = function (polygonId) {
+        var polygon = window.polygonsById[polygonId];
+        if (!polygon) {
+            alert('Polygon not found!');
+            return;
+        }
+
+        try {
+            startPolygonEditing(polygon, polygonId);
+        } catch (error) {
+            console.error('Error starting polygon editing:', error);
+            alert('Error starting edit mode. This polygon may be corrupted.');
+        }
+    };
+
+    // =============================================
+    // LINE EDITING SYSTEM - Like Polygon Editing
+    // =============================================
+
+
+    window.editableLines = window.editableLines || {};
+
+    // Main line editing function
+    window.enableLineEditingById = function (lineId) {
+        var line = window.linesById[lineId];
+        if (!line) {
+            alert('Line not found!');
+            return;
+        }
+
+        try {
+            startLineEditing(line, lineId);
+        } catch (error) {
+            console.error('Error starting line editing:', error);
+            alert('Error starting edit mode. This line may be corrupted.');
+        }
+    };
+
+    function startLineEditing(line, lineId) {
+        var currentCoords = line.getLatLngs();
+        var markers = [];
+        var updatedCoords = [];
+
+        console.log('Starting line editing with coordinates:', currentCoords);
+
+        // Create draggable markers for each coordinate
+        currentCoords.forEach(function (coord, index) {
+            var lat, lng;
+
+            // Extract coordinates from Leaflet LatLng objects
+            if (coord && coord.lat !== undefined && coord.lng !== undefined) {
+                lat = coord.lat;
+                lng = coord.lng;
+            } else if (Array.isArray(coord) && coord.length >= 2) {
+                lat = coord[0];
+                lng = coord[1];
+            } else {
+                console.warn('Skipping invalid coordinate at index:', index, coord);
+                updatedCoords[index] = null;
+                return;
+            }
+
+            // Validate coordinates
+            if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng)) {
+                console.warn('Skipping coordinate with invalid numbers at index:', index, lat, lng);
+                updatedCoords[index] = null;
+                return;
+            }
+
+            try {
+                var marker = L.marker([lat, lng], {
+                    draggable: true,
+                    icon: L.divIcon({
+                        className: 'line-vertex-marker',
+                        html: '<div style="background: #ff6b35; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 8px rgba(255,107,53,0.8);"></div>',
+                        iconSize: [16, 16]
+                    })
+                }).addTo(map);
+
+                marker.index = index;
+                markers.push(marker);
+                updatedCoords[index] = [lat, lng];
+
+                marker.on('drag', function (e) {
+                    var newPos = e.target.getLatLng();
+                    updatedCoords[this.index] = [newPos.lat, newPos.lng];
+                    updateLineShape();
+                });
+
+            } catch (error) {
+                console.error('Error creating marker:', error);
+                updatedCoords[index] = null;
+            }
+        });
+
+        function updateLineShape() {
+            var validCoords = updatedCoords.filter(coord => coord !== null);
+            console.log('Updating line shape with valid coordinates:', validCoords.length);
+
+            if (validCoords.length >= 2) {
+                var latLngs = validCoords.map(function (coord) {
+                    return L.latLng(coord[0], coord[1]);
+                });
+                line.setLatLngs(latLngs);
+            } else {
+                console.warn('Not enough valid coordinates to form a line:', validCoords.length);
+            }
+        }
+
+        // Check if we have enough markers
+        var validMarkerCount = markers.length;
+        if (validMarkerCount < 2) {
+            alert(`Error: Only ${validMarkerCount} valid coordinates found (need at least 2). This line cannot be edited.`);
+            markers.forEach(function (marker) {
+                if (marker && map.hasLayer(marker)) {
+                    map.removeLayer(marker);
+                }
+            });
+            return;
+        }
+
+        // Safely extract original lineData
+        var originalLineData = {};
+        if (line.lineData) {
+            originalLineData = JSON.parse(JSON.stringify(line.lineData));
+        } else if (line.options && line.options.lineData) {
+            originalLineData = JSON.parse(JSON.stringify(line.options.lineData));
+        }
+
+        // Store editing state
+        window.editableLines[lineId] = {
+            line: line,
+            markers: markers,
+            updatedCoords: updatedCoords,
+            originalCoords: JSON.parse(JSON.stringify(currentCoords)),
+            originalLineData: originalLineData
+        };
+
+        // Visual feedback for editing mode
+        line.setStyle({
+            color: '#ff0000',
+            weight: 5,
+            opacity: 1
+        });
+
+        line.bindPopup(`
+        <div style="color: black; min-width: 250px;">
+            <h4>✏️ Editing Line</h4>
+            <p>Drag orange points to reshape the line</p>
+            <p><small>Editable points: ${validMarkerCount}</small></p>
+            <button onclick="saveLineEdits('${lineId}')"
+                    style="padding: 8px; background: #28a745; color: white; border: none; border-radius: 3px; cursor: pointer; width: 100%; margin: 2px;">
+                💾 Save Changes
+            </button>
+            <button onclick="cancelLineEditing('${lineId}')"
+                    style="padding: 8px; background: #6c757d; color: white; border: none; border-radius: 3px; cursor: pointer; width: 100%; margin: 2px;">
+                ❌ Cancel
+            </button>
+        </div>
+    `).openPopup();
+
+        // Close editing when clicking elsewhere on map
+        map.once('click', function () {
+            if (window.editableLines[lineId]) {
+                cancelLineEditing(lineId);
+            }
+        });
+    }
+
+    // Save line edits
+    window.saveLineEdits = function (lineId) {
+        if (!window.editableLines || !window.editableLines[lineId]) {
+            alert('No line found for editing!');
+            return;
+        }
+
+        var editable = window.editableLines[lineId];
+        var line = editable.line;
+
+        // Critical check: line must exist and still be on the map
+        if (!line || !map.hasLayer(line)) {
+            alert('Error: The line no longer exists on the map. Changes cannot be saved.');
+            console.error('Line missing or removed during editing (lineId:', lineId, ')');
+            disableLineEditing(lineId);
+            return;
+        }
+
+        // Filter valid coordinates
+        var coordinatesForBackend = editable.updatedCoords
+            .filter(coord => coord !== null)
+            .map(coord => [coord[0], coord[1]]);
+
+        if (coordinatesForBackend.length < 2) {
+            alert('Error: Not enough valid points to form a line.');
+            return;
+        }
+
+        console.log('Saving line with coordinates count:', coordinatesForBackend.length);
+
+        // Use stored originalLineData as safe fallback
+        var lineData = editable.originalLineData || {
+            neighbourhood: 'Unknown Neighbourhood',
+            suburb_group: 'Unknown Suburb',
+            averageMonthlyKL: 20
+        };
+
+        var neighbourhood = lineData.neighbourhood || 'Unknown Neighbourhood';
+
+        var suburbGroup = lineData.suburb_group;
+        if (Array.isArray(suburbGroup)) {
+            suburbGroup = suburbGroup.join(', ');
+        } else if (!suburbGroup) {
+            suburbGroup = 'Unknown Suburb';
+        }
+
+        var averageMonthlyKL = lineData.averageMonthlyKL || 20;
+
+        var updateData = {
+            id: lineId,
+            coordinates: JSON.stringify(coordinatesForBackend),
+            neighbourhood: neighbourhood,
+            suburb_group: suburbGroup,
+            averageMonthlyKL: averageMonthlyKL,
+            type: 'line'
+        };
+
+        console.log('Sending line update data:', updateData);
+
+        var saveButton = document.querySelector('[onclick*="saveLineEdits"]');
+        if (saveButton) {
+            saveButton.innerHTML = '⏳ Saving...';
+            saveButton.disabled = true;
+        }
+
+        $.ajax({
+            url: '/waterconsumption/updatepolygon',
+            type: 'PUT',
+            contentType: 'application/json',
+            data: JSON.stringify(updateData),
+            timeout: 10000,
+            success: function (response) {
+                console.log('✅ Server response:', response);
+                alert('✅ Line updated successfully!');
+
+                // Update line's local data
+                if (!line.lineData) line.lineData = {};
+                line.lineData.neighbourhood = neighbourhood;
+                line.lineData.suburb_group = suburbGroup;
+                line.lineData.averageMonthlyKL = averageMonthlyKL;
+                line.lineData.coordinates = coordinatesForBackend;
+
+                disableLineEditing(lineId);
+            },
+            error: function (xhr, status, error) {
+                console.error('First structure failed, trying alternative...');
+
+                var updateData2 = {
+                    dto: {
+                        Id: lineId,
+                        Coordinates: JSON.stringify(coordinatesForBackend),
+                        Neighbourhood: neighbourhood,
+                        SuburbGroup: suburbGroup,
+                        AverageMonthlyKL: averageMonthlyKL
+                    }
+                };
+
+                $.ajax({
+                    url: '/waterconsumption/updatepolygon',
+                    type: 'PUT',
+                    contentType: 'application/json',
+                    data: JSON.stringify(updateData2),
+                    timeout: 10000,
+                    success: function (response) {
+                        console.log('✅ Server response (structure 2):', response);
+                        alert('✅ Line updated successfully!');
+
+                        if (!line.lineData) line.lineData = {};
+                        line.lineData.neighbourhood = neighbourhood;
+                        line.lineData.suburb_group = suburbGroup;
+                        line.lineData.averageMonthlyKL = averageMonthlyKL;
+                        line.lineData.coordinates = coordinatesForBackend;
+
+                        disableLineEditing(lineId);
+                    },
+                    error: function (xhr2, status2, error2) {
+                        console.error('Both update attempts failed:', xhr2.responseText);
+                        var errorMsg = '❌ Update failed.\n';
+                        try {
+                            var err = JSON.parse(xhr2.responseText);
+                            if (err.errors) {
+                                for (var k in err.errors) errorMsg += k + ': ' + err.errors[k] + '\n';
+                            } else errorMsg += xhr2.responseText;
+                        } catch (e) {
+                            errorMsg += xhr2.responseText || error2;
+                        }
+                        alert(errorMsg);
+                    },
+                    complete: function () {
+                        if (saveButton) {
+                            saveButton.innerHTML = '💾 Save Changes';
+                            saveButton.disabled = false;
+                        }
+                    }
+                });
+            },
+            complete: function () {
+                if (saveButton) {
+                    saveButton.innerHTML = '💾 Save Changes';
+                    saveButton.disabled = false;
+                }
+            }
+        });
+    };
+
+    // Cancel line editing
+    window.cancelLineEditing = function (lineId) {
+        if (!window.editableLines || !window.editableLines[lineId]) return;
+
+        var editable = window.editableLines[lineId];
+
+        if (editable.originalCoords && editable.line && map.hasLayer(editable.line)) {
+            try {
+                editable.line.setLatLngs(editable.originalCoords);
+            } catch (error) {
+                console.error('Error restoring coordinates:', error);
+            }
+        }
+
+        disableLineEditing(lineId);
+    };
+
+    // Disable line editing (cleanup)
+    window.disableLineEditing = function (lineId) {
+        if (!window.editableLines || !window.editableLines[lineId]) return;
+
+        var editable = window.editableLines[lineId];
+        var line = editable.line;
+
+        // If line is gone, just clean up state
+        if (!line || !map.hasLayer(line)) {
+            console.warn('Line no longer on map during cleanup');
+            delete window.editableLines[lineId];
+            return;
+        }
+
+        // Remove markers
+        editable.markers.forEach(function (marker) {
+            if (marker && map.hasLayer(marker)) {
+                map.removeLayer(marker);
+            }
+        });
+
+        // Restore random color style
+        var lineColors = ["#ff6b35", "#4ecdc4", "#45b7d1", "#f7b731", "#5f27cd", "#00d2d3"];
+        var randomColor = lineColors[Math.floor(Math.random() * lineColors.length)];
+
+        line.setStyle({
+            color: randomColor,
+            weight: 4,
+            opacity: 1
+        });
+
+        // Restore original popup
+        var lineData = line.lineData || editable.originalLineData || {};
+        line.bindPopup(`
+        <div style="color: black; min-width: 200px;">
+            <h4><b>Suburb Group:</b> [${lineData.suburb_group || 'N/A'}]</h4>
+            <h4><b>Neighbourhood:</b> ${lineData.neighbourhood || 'N/A'}</h4>
+            <h4><b>Water Consumption:</b> ${lineData.averageMonthlyKL || 'N/A'} KL</h4>
+            <button onclick="enableLineEditingById('${lineId}')"
+                    style="padding: 8px; width: 100%; margin: 5px 0; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer;">
+                ✏️ Edit Line
+            </button>
+            <button onclick="deleteLayer('${lineId}', 'Line')"
+                    style="padding: 8px; width: 100%; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer;">
+                🗑️ Delete
+            </button>
+        </div>
+    `);
+
+        line.closePopup();
+
+        delete window.editableLines[lineId];
+    };
+
+
+
+    function startPolygonEditing(polygon, polygonId) {
+        var currentCoords = polygon.getLatLngs()[0];
+        var markers = [];
+        var updatedCoords = [];
+
+        console.log('Starting polygon editing with coordinates:', currentCoords);
+
+        // Handle nested array structure if needed
+        if (Array.isArray(currentCoords) && currentCoords.length > 0 && Array.isArray(currentCoords[0])) {
+            currentCoords = currentCoords[0];
+        }
+
+        // Create markers for each valid coordinate
+        currentCoords.forEach(function (coord, index) {
+            var lat, lng;
+
+            // Extract coordinates directly from Leaflet LatLng objects
+            if (coord && coord.lat !== undefined && coord.lng !== undefined) {
+                lat = coord.lat;
+                lng = coord.lng;
+            } else if (Array.isArray(coord) && coord.length >= 2) {
+                lat = coord[0];
+                lng = coord[1];
+            } else {
+                console.warn('Skipping invalid coordinate at index:', index, coord);
+                updatedCoords[index] = null;
+                return;
+            }
+
+            // Validate coordinates
+            if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng)) {
+                console.warn('Skipping coordinate with invalid numbers at index:', index, lat, lng);
+                updatedCoords[index] = null;
+                return;
+            }
+
+            try {
+                var marker = L.marker([lat, lng], {
+                    draggable: true,
+                    icon: L.divIcon({
+                        className: 'vertex-marker',
+                        html: '<div style="background: #ff0000; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.5);"></div>',
+                        iconSize: [16, 16]
+                    })
+                }).addTo(map);
+
+                marker.index = index;
+                markers.push(marker);
+                updatedCoords[index] = [lat, lng];
+
+                marker.on('drag', function (e) {
+                    var newPos = e.target.getLatLng();
+                    updatedCoords[this.index] = [newPos.lat, newPos.lng];
+                    updatePolygonShape();
+                });
+
+            } catch (error) {
+                console.error('Error creating marker:', error);
+                updatedCoords[index] = null;
+            }
+        });
+
+        function updatePolygonShape() {
+            var validCoords = updatedCoords.filter(coord => coord !== null);
+            console.log('Updating polygon shape with valid coordinates:', validCoords.length);
+
+            if (validCoords.length >= 3) {
+                var latLngs = validCoords.map(function (coord) {
+                    return L.latLng(coord[0], coord[1]);
+                });
+                polygon.setLatLngs([latLngs]);
+
+            }
+            else {
+                console.error('Not enough valid coordinates to form a polygon:', validCoords.length);
+            }
+        }
+
+        // Check if we have enough markers
+        var validMarkerCount = markers.length;
+        if (validMarkerCount == 1) {
+            console.log('Single coordinate detected - treating as point:', polygonId);
+
+            // Create a point from this single coordinate and delete the polygon
+            var singleCoord = currentCoords[0];
+            var pointData = polygon.polygonData || {};
+
+            // Create a new point
+            var pointId = window.createPoint(singleCoord.lat, singleCoord.lng, pointData);
+
+            // Remove the corrupted polygon
+            map.removeLayer(polygon);
+            delete window.polygonsById[polygonId];
+
+            // Edit the new point instead
+            window.enablePointEditing(pointId);
+            return;
+
+
+        }
+        if (validMarkerCount < 3) {
+            alert(`Error: Only ${validMarkerCount} valid coordinates found (need at least 3). This polygon cannot be edited.`);
+            // Clean up any markers that were created
+            markers.forEach(function (marker) {
+                try {
+                    if (marker && map.hasLayer(marker)) {
+                        map.removeLayer(marker);
+                    }
+                } catch (error) {
+                    console.error('Error removing marker:', error);
+                }
+            });
+            return;
+        }
+
+        // Store editing state
+        window.editablePolygons[polygonId] = {
+            polygon: polygon,
+            markers: markers,
+            updatedCoords: updatedCoords,
+            originalCoords: JSON.parse(JSON.stringify(currentCoords))
+        };
+
+        // Visual feedback for editing mode
+        polygon.setStyle({
+            color: '#ff0000',
+            fillColor: '#ff0000',
+            fillOpacity: 0.3,
+            weight: 3
+        });
+
+        polygon.bindPopup(`
+        <div style="color: black; min-width: 250px;">
+            <h4>✏️ Editing Mode</h4>
+            <p>Drag red points to reshape the polygon</p>
+            <p><small>Editable points: ${validMarkerCount}</small></p>
+            <button onclick="savePolygonEdits('${polygonId}')" 
+                    style="padding: 8px; background: #28a745; color: white; border: none; border-radius: 3px; cursor: pointer; width: 100%; margin: 2px;">
+                💾 Save Changes
+            </button>
+            <button onclick="cancelPolygonEditing('${polygonId}')" 
+                    style="padding: 8px; background: #6c757d; color: white; border: none; border-radius: 3px; cursor: pointer; width: 100%; margin: 2px;">
+                ❌ Cancel
+            </button>
+        </div>
+    `).openPopup();
+
+        // Close editing when clicking on map
+        map.once('click', function () {
+            if (window.editablePolygons[polygonId]) {
+                cancelPolygonEditing(polygonId);
+            }
+        });
+    }
+
+    // Save function - FIXED
+    // Save function - MATCHING THE CREATE STRUCTURE
+    window.savePolygonEdits = function (polygonId) {
+        if (!window.editablePolygons || !window.editablePolygons[polygonId]) {
+            alert('No polygon found for editing!');
+            return;
+        }
+
+        var editable = window.editablePolygons[polygonId];
+        var polygon = editable.polygon;
+
+        // Filter out null coordinates and prepare for backend
+        var coordinatesForBackend = editable.updatedCoords
+            .filter(coord => coord !== null)
+            .map(coord => [coord[0], coord[1]]);
+
+        // 🔥 CLOSE THE POLYGON - Add first point as last point if not already closed
+        if (coordinatesForBackend.length >= 3) {
+            var first = coordinatesForBackend[0];
+            var last = coordinatesForBackend[coordinatesForBackend.length - 1];
+            var isClosed = (first[0] === last[0] && first[1] === last[1]);
+
+            if (!isClosed) {
+                coordinatesForBackend.push([first[0], first[1]]); // Close the polygon
+                console.log('🔥 Polygon closed by adding first point as last');
+            }
+        }
+
+        console.log('Saving polygon with coordinates count:', coordinatesForBackend.length);
+
+        // Get polygon data including suburb and neighbourhood
+        var polygonData = polygon.polygonData || {};
+
+        var neighbourhood = polygonData.neighbourhood || 'Unknown Neighbourhood';
+
+        // Convert suburb_group to string
+        var suburbGroup = polygonData.suburb_group;
+        if (Array.isArray(suburbGroup)) {
+            suburbGroup = suburbGroup.join(', ');
+        } else if (!suburbGroup) {
+            suburbGroup = 'Unknown Suburb';
+        }
+
+        var averageMonthlyKL = polygonData.averageMonthlyKL || 20;
+
+        // Structure matching the create endpoint
+        var updateData = {
+            id: polygonId,
+            coordinates: JSON.stringify(coordinatesForBackend),
+            neighbourhood: neighbourhood,
+            suburb_group: suburbGroup,
+            averageMonthlyKL: averageMonthlyKL,
+            type: 'polygon'
+        };
+
+        console.log('Sending update data:', updateData);
+
+        // Add loading indicator
+        var saveButton = document.querySelector('[onclick*="savePolygonEdits"]');
+        if (saveButton) {
+            saveButton.innerHTML = '⏳ Saving...';
+            saveButton.disabled = true;
+        }
+
+        $.ajax({
+            url: '/waterconsumption/updatepolygon',
+            type: 'PUT',
+            contentType: 'application/json',
+            data: JSON.stringify(updateData),
+            timeout: 10000,
+            success: function (response) {
+                console.log('✅ Server response:', response);
+                alert('✅ Polygon updated successfully!');
+
+                // Update local data
+                polygon.polygonData = {
+                    neighbourhood: neighbourhood,
+                    suburb_group: suburbGroup,
+                    averageMonthlyKL: averageMonthlyKL
+                };
+                polygon.averageMonthlyKL = averageMonthlyKL;
+
+                // Update polygon color
+                polygon.setStyle({
+                    fillColor: getColor(averageMonthlyKL)
+                });
+
+                disablePolygonEditing(polygonId);
+            },
+            error: function (xhr, status, error) {
+                console.error('Structure 1 failed, trying structure 2...');
+
+                // Try with dto wrapper and capitalized fields
+                var updateData2 = {
+                    dto: {
+                        Id: polygonId,
+                        Coordinates: JSON.stringify(coordinatesForBackend),
+                        Neighbourhood: neighbourhood,
+                        SuburbGroup: suburbGroup,
+                        AverageMonthlyKL: averageMonthlyKL
+                    }
+                };
+
+                console.log('Trying structure 2 (capitalized with dto):', updateData2);
+
+                $.ajax({
+                    url: '/waterconsumption/updatepolygon',
+                    type: 'PUT',
+                    contentType: 'application/json',
+                    data: JSON.stringify(updateData2),
+                    timeout: 10000,
+                    success: function (response) {
+                        console.log('✅ Server response (structure 2):', response);
+                        alert('✅ Polygon updated successfully!');
+
+                        // Update local data
+                        polygon.polygonData = {
+                            neighbourhood: neighbourhood,
+                            suburb_group: suburbGroup,
+                            averageMonthlyKL: averageMonthlyKL
+                        };
+                        polygon.averageMonthlyKL = averageMonthlyKL;
+
+                        // Update polygon color
+                        polygon.setStyle({
+                            fillColor: getColor(averageMonthlyKL)
+                        });
+
+                        disablePolygonEditing(polygonId);
+                    },
+                    error: function (xhr2, status2, error2) {
+                        console.error('Structure 2 also failed:', {
+                            status: status2,
+                            error: error2,
+                            responseText: xhr2.responseText
+                        });
+
+                        // Show the exact error from server
+                        var errorMsg = '❌ Update failed. Server says:\n';
+                        try {
+                            var errorObj = JSON.parse(xhr2.responseText);
+                            if (errorObj.errors) {
+                                for (var key in errorObj.errors) {
+                                    errorMsg += key + ': ' + errorObj.errors[key] + '\n';
+                                }
+                            } else {
+                                errorMsg += xhr2.responseText;
+                            }
+                        } catch (e) {
+                            errorMsg += xhr2.responseText || error2;
+                        }
+
+                        alert(errorMsg);
+                    },
+                    complete: function () {
+                        // Restore button
+                        if (saveButton) {
+                            saveButton.innerHTML = '💾 Save Changes';
+                            saveButton.disabled = false;
+                        }
+                    }
+                });
+            },
+            complete: function () {
+                // Restore button if first request succeeds
+                if (saveButton) {
+                    saveButton.innerHTML = '💾 Save Changes';
+                    saveButton.disabled = false;
+                }
+            }
+        });
+    };
+
+    function showRecoveryOptions(polygonId) {
+        var recoveryDialog = L.control({ position: 'topright' });
+        recoveryDialog.onAdd = function (map) {
+            var div = L.DomUtil.create('div', 'recovery-dialog');
+            div.innerHTML = `
+                <div style="position:relative;top:500px;background: rgba(0,0,0,0.95); padding: 15px; border-radius: 5px; color: white; width: 300px;">
+                    <h5 style="margin: 0 0 15px 0; text-align: center;">⚠️ Polygon Issue Detected</h5>
+                    <p style="font-size: 12px; margin-bottom: 15px;">This polygon has invalid coordinates and cannot be edited normally.</p>
+                    <button id="deletePolygon" style="padding: 8px; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer; width: 100%; margin: 5px 0;">
+                        🗑️ Delete Problematic Polygon
+                    </button>
+                    <button id="cancelRecovery" style="padding: 8px; background: #6c757d; color: white; border: none; border-radius: 3px; cursor: pointer; width: 100%; margin: 5px 0;">
+                        ❌ Cancel
+                    </button>
+                </div>
+            `;
+            return div;
+        };
+
+        recoveryDialog.addTo(map);
+
+        setTimeout(function () {
+            document.getElementById('deletePolygon').onclick = function () {
+                map.removeControl(recoveryDialog);
+                window.deleteLayer(polygonId, 'Polygon');
+            };
+
+            document.getElementById('cancelRecovery').onclick = function () {
+                map.removeControl(recoveryDialog);
+            };
+        }, 100);
+    }
+
+    // Add this function to read and log polygon coordinates to console
+    window.logPolygonCoordinates = function (polygonId) {
+        var polygon = window.polygonsById[polygonId];
+        if (!polygon) {
+            console.error('Polygon not found:', polygonId);
+            return;
+        }
+
+        try {
+            var coords = polygon.getLatLngs()[0];
+            console.log('=== POLYGON COORDINATES ===');
+            console.log('Polygon ID:', polygonId);
+
+            // Check if coords is an array of arrays (nested structure)
+            if (Array.isArray(coords) && coords.length > 0 && Array.isArray(coords[0])) {
+                // Handle nested array structure
+                coords = coords[0];
+            }
+
+            coords.forEach(function (coord, index) {
+                // Extract coordinates directly from Leaflet LatLng objects
+                if (coord && coord.lat !== undefined && coord.lng !== undefined) {
+                    console.log(`Point ${index}: [${coord.lat}, ${coord.lng}]`);
+                } else if (Array.isArray(coord) && coord.length >= 2) {
+                    console.log(`Point ${index}: [${coord[0]}, ${coord[1]}]`);
+                } else {
+                    console.log(`Point ${index}: INVALID COORDINATE -`, coord);
+                }
+            });
+
+            console.log('Total points:', coords.length);
+            console.log('============================');
+
+        } catch (error) {
+            console.error('Error reading polygon coordinates:', error);
+        }
+    };
+
+    window.disablePolygonEditing = function (polygonId) {
+        if (!window.editablePolygons || !window.editablePolygons[polygonId]) return;
+
+        var editable = window.editablePolygons[polygonId];
+
+        // Remove all markers
+        editable.markers.forEach(function (marker) {
+            try {
+                if (marker && map.hasLayer(marker)) {
+                    map.removeLayer(marker);
+                }
+            } catch (error) {
+                console.error('Error removing marker:', error);
+            }
+        });
+
+        // Restore original style
+        var originalColor = getColor(editable.polygon.averageMonthlyKL || 20);
+        editable.polygon.setStyle({
+            color: 'white',
+            fillColor: originalColor,
+            fillOpacity: 0.8,
+            weight: 2
+        });
+
+        // Restore original popup
+        var polygonData = editable.polygon.polygonData || {};
+        editable.polygon.bindPopup(`
+        <div style="color: black; min-width: 200px;">
+            <h4><b>Suburb Group:</b> [${polygonData.suburb_group || 'N/A'}]</h4>
+            <h4><b>Neighbourhood:</b> ${polygonData.neighbourhood || 'N/A'}</h4>
+            <h4><b>Water Consumption:</b> ${polygonData.averageMonthlyKL || 'N/A'} KL</h4>
+            <button onclick="enablePolygonEditingById('${polygonId}')" 
+                    style="padding: 8px; width: 100%; margin: 5px 0; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer;">
+                ✏️ Edit Shape
+            </button>
+            <button onclick="logPolygonCoordinates('${polygonId}')" 
+                    style="padding: 8px; width: 100%; margin: 5px 0; background: #28a745; color: white; border: none; border-radius: 3px; cursor: pointer;">
+                📊 Log Coordinates
+            </button>
+            <button onclick="deleteLayer('${polygonId}', 'Polygon')" 
+                    style="padding: 8px; width: 100%; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer;">
+                🗑️ Delete
+            </button>
+        </div>
+    `);
+
+        editable.polygon.closePopup();
+        delete window.editablePolygons[polygonId];
+    };
+
+    // Cancel editing function - ADD THIS
+    window.cancelPolygonEditing = function (polygonId) {
+        if (!window.editablePolygons || !window.editablePolygons[polygonId]) return;
+
+        var editable = window.editablePolygons[polygonId];
+
+        // Restore original coordinates
+        if (editable.originalCoords) {
+            // Handle nested structure for original coordinates too
+            var originalCoords = editable.originalCoords;
+            if (Array.isArray(originalCoords) && originalCoords.length > 0 && Array.isArray(originalCoords[0])) {
+                originalCoords = originalCoords[0];
+            }
+            editable.polygon.setLatLngs([originalCoords]);
+        }
+
+        disablePolygonEditing(polygonId);
+    };
+
+
+
+
+    function showLineSaveDialog(points) {
+        var saveDialog = L.control({ position: 'topright' });
+        saveDialog.onAdd = function (map) {
+            var div = L.DomUtil.create('div', 'save-dialog');
+            div.innerHTML = `
+            <div style="position:relative;background: rgba(0,0,0,0.95); padding: 15px; border-radius: 5px; color: white; width: 300px;">
+                <h5 style="margin: 0 0 15px 0; text-align: center;">Save Line</h5>
+                <div style="margin-bottom: 10px;">
+                    <label>Neighbourhood:</label>
+                    <input type="text" id="lineNeighbourhood" style="width: 100%; padding: 5px; color: black;">
+                </div>
+                <div style="margin-bottom: 10px;">
+                    <label>Suburb Group:</label>
+                    <input type="text" id="lineSuburb" style="width: 100%; padding: 5px; color: black;">
+                </div>
+                <div style="margin-bottom: 10px;">
+                    <label>Average Monthly KL:</label>
+                    <input type="number" id="lineConsumption" style="width: 100%; padding: 5px; color: black;">
+                </div>
+                <p style="font-size: 12px; margin-bottom: 15px;">
+                    Points: ${points.length}
+                </p>
+                <button id="saveLine" style="padding: 8px; background: #ff6b35; color: white; border: none; border-radius: 3px; cursor: pointer; width: 48%; margin-right: 4%;">Save</button>
+                <button id="cancelLine" style="padding: 8px; background: #8B0000; color: white; border: none; border-radius: 3px; cursor: pointer; width: 48%;">Cancel</button>
+            </div>
+        `;
+            return div;
+        };
+
+        saveDialog.addTo(map);
+
+        setTimeout(function () {
+            document.getElementById('saveLine').addEventListener('click', function (e) {
+                L.DomEvent.stopPropagation(e);  // ADD THIS
+                saveLineToBackend(points);
+                map.removeControl(saveDialog);
+            });
+
+            document.getElementById('cancelLine').addEventListener('click', function (e) {
+                L.DomEvent.stopPropagation(e);  // ADD THIS
+                map.removeControl(saveDialog);
+            });
+        }, 100);
+    }
+
+    // 3. SAVE LINE TO BACKEND
+    function saveLineToBackend(points) {
+        var neighbourhood = document.getElementById('lineNeighbourhood').value;
+        var suburb = document.getElementById('lineSuburb').value;
+        var averageMonthlyKL = parseFloat(document.getElementById('lineConsumption').value);
+
+        if (!neighbourhood || !suburb || isNaN(averageMonthlyKL)) {
+            alert('Please fill in all required fields!');
+            return;
+        }
+
+        var coordinates = points.map(function (point) {
+            return [point.lat, point.lng];
+        });
+
+        var lineData = {
+            neighbourhood: neighbourhood,
+            suburb_group: [suburb],
+            averageMonthlyKL: averageMonthlyKL
+        };
+
+        // Create the line visually
+        var lineId = window.createLine(points, lineData);
+
+        // Send to backend
+        $.ajax({
+            url: '/waterconsumption/addline',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                coordinates: JSON.stringify(coordinates),
+                neighbourhood: neighbourhood,
+                suburb_group: suburb,
+                averageMonthlyKL: averageMonthlyKL
+            }),
+            success: function (response) {
+                console.log('✅ Line saved:', response);
+                alert('Line saved successfully!');
+            },
+            error: function (xhr, status, error) {
+                console.error('❌ Error saving line:', error);
+                alert('Error saving line: ' + error);
+            }
+        });
+    }
+
+    // 4. CREATE LINE (Visual)
+    window.createLine = function (latLngs, data = {}) {
+        var polyline = L.polyline(latLngs, {
+            color: '#ff6b35',
+            weight: 4,
+            opacity: 0.8
+        }).addTo(map);
+
+        var lineId = 'line_' + Date.now();
+        window.linesById[lineId] = polyline;
+
+        polyline.lineData = {
+            neighbourhood: data.neighbourhood || 'Unknown',
+            suburb_group: data.suburb_group || ['Unknown'],
+            averageMonthlyKL: data.averageMonthlyKL || 0,
+            coordinates: latLngs
+        };
+
+        polyline.bindPopup(`
+        <div style="color: black; min-width: 200px;">
+            <h4><b>Line Data</b></h4>
+            <p><b>Neighbourhood:</b> ${polyline.lineData.neighbourhood}</p>
+            <p><b>Suburb Group:</b> [${polyline.lineData.suburb_group}]</p>
+            <p><b>Water Consumption:</b> ${polyline.lineData.averageMonthlyKL} KL</p>
+            <p><b>Points:</b> ${latLngs.length}</p>
+            <button onclick="enableLineEditing('${lineId}')" 
+                    style="padding: 8px; width: 100%; margin: 5px 0; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer;">
+                ✏️ Edit Line
+            </button>
+            <button onclick="deleteLayer('${lineId}', 'Line')" 
+                    style="padding: 8px; width: 100%; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer;">
+                🗑️ Delete
+            </button>
+        </div>
+    `);
+
+        return lineId;
+    };
+
+    // 5. EDIT LINE
+    window.enableLineEditing = function (lineId) {
+        var polyline = window.linesById[lineId];
+        if (!polyline) {
+            alert('Line not found!');
+            return;
+        }
+
+        var currentCoords = polyline.getLatLngs();
+        var markers = [];
+        var updatedCoords = [];
+
+        currentCoords.forEach(function (coord, index) {
+            var marker = L.marker([coord.lat, coord.lng], {
+                draggable: true,
+                icon: L.divIcon({
+                    className: 'line-vertex-marker',
+                    html: '<div style="background: #ff6b35; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 8px rgba(255,107,53,0.8);"></div>',
+                    iconSize: [16, 16]
+                })
+            }).addTo(map);
+
+            marker.index = index;
+            markers.push(marker);
+            updatedCoords[index] = [coord.lat, coord.lng];
+
+            marker.on('drag', function (e) {
+                var newPos = e.target.getLatLng();
+                updatedCoords[this.index] = [newPos.lat, newPos.lng];
+
+                var validCoords = updatedCoords.filter(coord => coord !== undefined);
+                var latLngs = validCoords.map(function (coord) {
+                    return L.latLng(coord[0], coord[1]);
+                });
+                polyline.setLatLngs(latLngs);
+            });
+        });
+
+        window.editableLines[lineId] = {
+            polyline: polyline,
+            markers: markers,
+            updatedCoords: updatedCoords,
+            originalCoords: JSON.parse(JSON.stringify(currentCoords))
+        };
+
+        polyline.setStyle({
+            color: '#ff0000',
+            weight: 5,
+            opacity: 1
+        });
+
+        polyline.bindPopup(`
+        <div style="color: black; min-width: 250px;">
+            <h4>✏️ Editing Line</h4>
+            <p>Drag orange points to reshape the line</p>
+            <button onclick="event.stopPropagation();saveLineEdits('${lineId}')" 
+                    style="padding: 8px; background: #28a745; color: white; border: none; border-radius: 3px; cursor: pointer; width: 100%; margin: 2px;">
+                💾 Save Changes
+            </button>
+            <button onclick="event.stopPropagation();cancelLineEditing('${lineId}')" 
+                    style="padding: 8px; background: #6c757d; color: white; border: none; border-radius: 3px; cursor: pointer; width: 100%; margin: 2px;">
+                ❌ Cancel
+            </button>
+        </div>
+    `).openPopup();
+    };
+
+    // 6. SAVE LINE EDITS
+    window.saveLineEdits = function (lineId) {
+
+        @* const editable = window.editableLines?.[lineId]; *@
+
+        if (!editable || !editable.line) {
+            console.error('Editable state missing for lineId:', lineId);
+            alert('Edit session expired. Please re-edit the line.');
+            return;
+        }
+
+        const line = editable.line;
+        if (!window.editableLines[lineId]) return;
+
+        var editable = window.editableLines[lineId];
+        var coordinatesForBackend = editable.updatedCoords
+            .filter(coord => coord !== undefined)
+            .map(coord => [coord[0], coord[1]]);
+
+        var updateData = {
+            id: lineId,
+            coordinates: JSON.stringify(coordinatesForBackend),
+            neighbourhood: editable.polyline.lineData.neighbourhood,
+            suburb_group: editable.polyline.lineData.suburb_group,
+            averageMonthlyKL: editable.polyline.lineData.averageMonthlyKL,
+            type: 'line'
+        };
+
+        $.ajax({
+            url: '/waterconsumption/updatepolygon',
+            type: 'PUT',
+            contentType: 'application/json',
+            data: JSON.stringify(updateData),
+            success: function (response) {
+                console.log('✅ Line updated:', response);
+                alert('✅ Line updated successfully!');
+                disableLineEditing(lineId);
+            },
+            error: function (xhr, status, error) {
+                console.error('❌ Error updating line:', error);
+                alert('❌ Error updating line: ' + error);
+            }
+        });
+    };
+
+    // 7. CANCEL LINE EDITING
+    window.cancelLineEditing = function (lineId) {
+        if (!window.editableLines[lineId]) return;
+
+        var editable = window.editableLines[lineId];
+        editable.polyline.setLatLngs(editable.originalCoords);
+        disableLineEditing(lineId);
+    };
+
+    // 8. DISABLE LINE EDITING
+    window.disableLineEditing = function (lineId) {
+        if (!window.editableLines[lineId]) return;
+
+        var editable = window.editableLines[lineId];
+
+        // Remove markers
+        editable.markers.forEach(function (marker) {
+            if (marker && map.hasLayer(marker)) {
+                map.removeLayer(marker);
+            }
+        });
+
+        // Restore original style
+        editable.polyline.setStyle({
+            color: '#ff6b35',
+            weight: 4,
+            opacity: 0.8
+        });
+
+        // Restore original popup
+        var lineData = editable.polyline.lineData || {};
+        editable.polyline.bindPopup(`
+        <div style="color: black; min-width: 200px;">
+            <h4><b>Line Data</b></h4>
+            <p><b>Neighbourhood:</b> ${lineData.neighbourhood}</p>
+            <p><b>Suburb Group:</b> [${lineData.suburb_group}]</p>
+            <p><b>Water Consumption:</b> ${lineData.averageMonthlyKL} KL</p>
+            <p><b>Points:</b> ${lineData.coordinates.length}</p>
+            <button onclick="enableLineEditing('${lineId}')" 
+                    style="padding: 8px; width: 100%; margin: 5px 0; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer;">
+                ✏️ Edit Line
+            </button>
+            <button onclick="deleteLayer('${lineId}', 'Line')" 
+                    style="padding: 8px; width: 100%; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer;">
+                🗑️ Delete
+            </button>
+        </div>
+    `);
+
+        delete window.editableLines[lineId];
+    };
+
+</script>
+@* ///-------------------------------///----------------------------------------///// *@
+<script>
+    // ============================================
+    // POINT FUNCTIONS (Already in your code!)
+    // ============================================
+
+    // 1. DRAW POINT - Click anywhere to place a point
+
+
+    // Save Point Dialog - FIXED
+
+
+    // ============================================
+    // LINE FUNCTIONS (Already in your code!)
+    // ============================================
+
+    // 1. DRAW LINE - Click to add points, right-click to finish
+
+
+    // 2. SAVE LINE DIALOG
+
+    // ============================================
+    // FIX: ADD EVENT PROPAGATION STOPPERS
+    // ============================================
+
+    // In addRangeControl(), ADD these event listeners:
+    @* setTimeout(function () {
+        document.getElementById('drawPoint').addEventListener('click', function (e) {
+            L.DomEvent.stopPropagation(e);
+            L.DomEvent.preventDefault(e);
+            startDrawingPoint();
+        });
+        document.getElementById('drawLine').addEventListener('click', function (e) {
+            L.DomEvent.stopPropagation(e);
+            L.DomEvent.preventDefault(e);
+            startDrawingLine();
+        });
+    }, 100); *@
+</script>

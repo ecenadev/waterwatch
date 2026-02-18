@@ -1,0 +1,274 @@
+@{
+    ViewData["Title"] = "Water Lines Map";
+}
+
+<!-- Import Leaflet CSS -->
+<link rel="stylesheet" href="~/app/leaflet/leaflet.css" />
+
+<style>
+    #map {
+        height: 100vh !important;
+        width: 100%;
+    }
+
+    .line-vertex-marker {
+        background: transparent !important;
+        border: none !important;
+    }
+
+    .legend {
+        padding: 10px;
+        background: rgba(0,0,0,0.85);
+        color: white;
+        border-radius: 5px;
+    }
+
+    .legend i {
+        width: 18px;
+        height: 18px;
+        float: left;
+        margin-right: 8px;
+        opacity: 0.7;
+    }
+</style>
+
+<!-- Import Scripts -->
+<script src="~/app/jquery/dist/jquery.min.js"></script>
+<script src="~/app/leaflet/leaflet.js"></script>
+
+<div id="map"></div>
+
+<script>
+    var map;
+    var dataUrl = "/waterlines/getall";
+    
+    window.linesById = {};
+    window.editableLines = {};
+
+    // Basemaps
+    var osm_map = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap'
+    });
+    var world_imagery = L.tileLayer('http://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '© Esri'
+    });
+
+    // Initialize map
+    map = L.map('map', {
+        layers: [osm_map]
+    }).setView([-33.925, 18.625], 11);
+
+    L.control.layers({
+        "Street Map": osm_map,
+        "Satellite": world_imagery
+    }).addTo(map);
+
+    // Load lines from database
+    $.getJSON(dataUrl, function (data) {
+        var lineColors = ["#3498db", "#2980b9", "#1f618d", "#85c1e9", "#5dade2", "#2e86c1"];
+        
+        var avgValues = data.map(d => parseFloat(d.averageMonthlyKL) || 0);
+        var minKL = Math.min(...avgValues);
+        var maxKL = Math.max(...avgValues);
+
+        $.each(data, function (i, item) {
+            try {
+                var coords = JSON.parse(item.coordinates || "[]");
+                
+                if (!Array.isArray(coords) || coords.length < 2) return;
+
+                // Calculate color based on flow
+                var avgKL = parseFloat(item.averageMonthlyKL) || 0;
+                var norm = (avgKL - minKL) / (maxKL - minKL || 1);
+                var colorIndex = Math.floor(norm * (lineColors.length - 1));
+                var color = lineColors[colorIndex];
+                var weight = 2 + norm * 4;
+
+                var line = L.polyline(coords, {
+                    color: color,
+                    weight: weight,
+                    opacity: 0.8
+                }).addTo(map);
+
+                var lineId = item.id || "line_" + line._leaflet_id;
+                window.linesById[lineId] = line;
+
+                line.lineData = {
+                    neighbourhood: item.neighbourhood || 'N/A',
+                    suburb_group: item.suburb_group || 'N/A',
+                    averageMonthlyKL: item.averageMonthlyKL || 0
+                };
+
+                line.bindPopup(`
+                    <div style='color: black;'>
+                        <h4><b>${item.neighbourhood || 'N/A'}</b></h4>
+                        <p><b>Suburb:</b> ${item.suburb_group || 'N/A'}</p>
+                        <p><b>Flow:</b> ${item.averageMonthlyKL || 'N/A'} KL</p>
+                        <button onclick='editLine("${lineId}")' 
+                                style='padding: 8px; width: 100%; margin: 5px 0; background: #007bff; color: white; border: none; border-radius: 3px;'>
+                            ✏️ Edit Line
+                        </button>
+                        <button onclick='deleteLine("${lineId}")' 
+                                style='padding: 8px; width: 100%; background: #dc3545; color: white; border: none; border-radius: 3px;'>
+                            🗑️ Delete
+                        </button>
+                    </div>
+                `);
+
+            } catch (error) {
+                console.error("Error loading line:", error, item);
+            }
+        });
+    });
+
+    // Edit line function
+    window.editLine = function(lineId) {
+        var line = window.linesById[lineId];
+        if (!line) return;
+
+        var coords = line.getLatLngs();
+        var markers = [];
+        var updatedCoords = [];
+
+        coords.forEach(function(coord, index) {
+            var marker = L.marker([coord.lat, coord.lng], {
+                draggable: true,
+                icon: L.divIcon({
+                    className: 'line-vertex-marker',
+                    html: '<div style="background: #ff6b35; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white;"></div>',
+                    iconSize: [16, 16]
+                })
+            }).addTo(map);
+
+            marker.index = index;
+            markers.push(marker);
+            updatedCoords[index] = [coord.lat, coord.lng];
+
+            marker.on('drag', function(e) {
+                var newPos = e.target.getLatLng();
+                updatedCoords[this.index] = [newPos.lat, newPos.lng];
+                line.setLatLngs(updatedCoords.map(c => L.latLng(c[0], c[1])));
+            });
+        });
+
+        window.editableLines[lineId] = {
+            line: line,
+            markers: markers,
+            updatedCoords: updatedCoords,
+            originalCoords: coords.map(c => [c.lat, c.lng])
+        };
+
+        line.setStyle({ color: '#ff0000', weight: 5 });
+        
+        line.bindPopup(`
+            <div style='color: black;'>
+                <h4>✏️ Editing Line</h4>
+                <p>Drag points to reshape</p>
+                <button onclick='saveLine("${lineId}")' 
+                        style='padding: 8px; width: 100%; margin: 2px; background: #28a745; color: white; border: none; border-radius: 3px;'>
+                    💾 Save
+                </button>
+                <button onclick='cancelEdit("${lineId}")' 
+                        style='padding: 8px; width: 100%; margin: 2px; background: #6c757d; color: white; border: none; border-radius: 3px;'>
+                    ❌ Cancel
+                </button>
+            </div>
+        `).openPopup();
+    };
+
+    // Save line edits
+    window.saveLine = function(lineId) {
+        var editable = window.editableLines[lineId];
+        if (!editable) return;
+
+        var coords = editable.updatedCoords.map(c => [c[0], c[1]]);
+        var lineData = editable.line.lineData;
+
+        $.ajax({
+            url: '/waterlines/update',
+            type: 'PUT',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                id: lineId,
+                coordinates: JSON.stringify(coords),
+                neighbourhood: lineData.neighbourhood,
+                suburb_group: lineData.suburb_group,
+                averageMonthlyKL: lineData.averageMonthlyKL
+            }),
+            success: function() {
+                alert('✅ Line updated!');
+                cancelEdit(lineId);
+            },
+            error: function(xhr) {
+                alert('❌ Error: ' + xhr.responseText);
+            }
+        });
+    };
+
+    // Cancel editing
+    window.cancelEdit = function(lineId) {
+        var editable = window.editableLines[lineId];
+        if (!editable) return;
+
+        editable.markers.forEach(m => map.removeLayer(m));
+        editable.line.setLatLngs(editable.originalCoords.map(c => L.latLng(c[0], c[1])));
+        editable.line.setStyle({ color: '#3498db', weight: 4 });
+        
+        var lineData = editable.line.lineData;
+        editable.line.bindPopup(`
+            <div style='color: black;'>
+                <h4><b>${lineData.neighbourhood}</b></h4>
+                <p><b>Suburb:</b> ${lineData.suburb_group}</p>
+                <p><b>Flow:</b> ${lineData.averageMonthlyKL} KL</p>
+                <button onclick='editLine("${lineId}")' 
+                        style='padding: 8px; width: 100%; margin: 5px 0; background: #007bff; color: white; border: none; border-radius: 3px;'>
+                    ✏️ Edit Line
+                </button>
+                <button onclick='deleteLine("${lineId}")' 
+                        style='padding: 8px; width: 100%; background: #dc3545; color: white; border: none; border-radius: 3px;'>
+                    🗑️ Delete
+                </button>
+            </div>
+        `);
+        
+        delete window.editableLines[lineId];
+    };
+
+    // Delete line
+    window.deleteLine = function(lineId) {
+        if (!confirm('Delete this line?')) return;
+
+        $.ajax({
+            url: '/waterlines/delete',
+            type: 'DELETE',
+            contentType: 'application/json',
+            data: JSON.stringify({ id: lineId }),
+            success: function() {
+                var line = window.linesById[lineId];
+                if (line) {
+                    map.removeLayer(line);
+                    delete window.linesById[lineId];
+                }
+                alert('✅ Line deleted!');
+            },
+            error: function(xhr) {
+                alert('❌ Error: ' + xhr.responseText);
+            }
+        });
+    };
+
+    // Legend
+    var legend = L.control({position: 'bottomright'});
+    legend.onAdd = function() {
+        var div = L.DomUtil.create('div', 'legend');
+        div.innerHTML = '<h4>Water Flow (KL)</h4>';
+        var colors = ["#1f618d", "#2980b9", "#3498db", "#5dade2", "#85c1e9"];
+        var labels = ['Low', '', 'Medium', '', 'High'];
+        
+        for (var i = 0; i < colors.length; i++) {
+            div.innerHTML += '<i style="background:' + colors[i] + '"></i> ' + labels[i] + '<br>';
+        }
+        return div;
+    };
+    legend.addTo(map);
+</script>
